@@ -2,7 +2,7 @@ import os
 import logging
 import time
 from PyQt5.QtCore import QObject, pyqtSignal
-from multiprocessing import Pool, Manager, cpu_count
+from multiprocessing import Pool, Manager
 import db, indexer, worker
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class Controller(QObject):
 
         # Throttle task submissions
         self.pending_tasks = 0
-        self.max_pending = self.num_workers * 2
+        self.max_pending = self.num_workers
         self.image_queue = []
 
     def scan_folder(self, folder_path):
@@ -43,7 +43,7 @@ class Controller(QObject):
         self._submit_next_images()
 
     def _submit_next_images(self):
-        while self.image_queue and self.pending_tasks < self.max_pending:
+        while self.image_queue and self.pending_tasks <= self.max_pending:
             path = self.image_queue.pop(0)
             self.pending_tasks += 1
             self.pool.apply_async(
