@@ -1,0 +1,7 @@
+env 
+__pycache__
+dlib
+models
+resources
+*.db
+*.index
