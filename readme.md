@@ -8,6 +8,8 @@ SnapSort is a cross-platform desktop application for offline, face-based image s
 
 Everything runs locally—no cloud uploads. SnapSort uses PyQt5 for the GUI, Python + `face_recognition` (dlib/CUDA) for ML, SQLite for metadata, and Faiss for fast vector search.
 
+> 📌 **Want to see what's coming next?** Check out the [TODO.md](TODO.md) for upcoming features, fixes, and improvements.
+
 # Features
 
 - Instant Thumbnail Gallery: Loads and displays all images in a selected folder immediately.
