@@ -1,7 +1,5 @@
-SnapSort
+# SnapSort
 
-Description
-===========
 SnapSort is a cross-platform desktop application for offline, face-based image sorting and viewing. Select a folder of photos and instantly browse thumbnails; in the background, SnapSort will detect faces, build a searchable embedding index, and let you:
 
 - Click any photo to see the faces it contains.
@@ -10,8 +8,8 @@ SnapSort is a cross-platform desktop application for offline, face-based image s
 
 Everything runs locally—no cloud uploads. SnapSort uses PyQt5 for the GUI, Python + `face_recognition` (dlib/CUDA) for ML, SQLite for metadata, and Faiss for fast vector search.
 
-Features
-========
+# Features
+
 - Instant Thumbnail Gallery: Loads and displays all images in a selected folder immediately.
 - Background Face Processing: Uses multiprocessing (or GPU-accelerated CNN) to detect faces and compute embeddings without blocking the UI.
 - Interactive Viewer & Face Panel: Click an image to enlarge it. A side panel lists every face in that photo—click one to filter the gallery.
@@ -20,15 +18,15 @@ Features
 - GPU-Ready: Supports GPU inference via `face_recognition`’s CNN model (requires dlib built with CUDA) or PyTorch-based models.
 - Detailed Logging: Logs every stage (scanning, processing, indexing, UI events) to help diagnose performance or errors.
 
-Requirements
-============
+# Requirements
+
 - Python ≥ 3.8
 - Qt (PyQt5)
 - Python Packages (see `requirements.txt`): `opencv-python`, `face_recognition`, `face_recognition_models`, `numpy`, `pillow`, `faiss-cpu` or `faiss-gpu`
 - Optional (GPU): A CUDA-enabled GPU and dlib compiled with CUDA, or GPU-enabled PyTorch.
 
-Installation
-============
+# Installation
+
 1. Clone the repository:
    ```
    git clone https://github.com/your-username/SnapSort.git
@@ -48,28 +46,31 @@ Installation
    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
    ```
 
-Usage
-=====
+# Usage
+
 Run the application:
+
 ```
 python main.py
 ```
+
 - Select Folder: Click “Select Folder” and choose any directory containing `.jpg`, `.png`, or `.jpeg` images.
 - Browse Thumbnails: All photos appear instantly as 120×120 thumbnails. The app begins detecting faces in the background.
 - View Faces in an Image: Click any thumbnail to enlarge it. The face panel on the right will list all detected faces in that photo.
 - Filter by Person: Click a face thumbnail to filter the gallery to every image containing that person. The “Back to All Images” button appears above the gallery.
 - Return to Full Gallery: Click **Back to All Images** to restore the complete thumbnail list.
 
-Configuration & Files
-=====================
+# Configuration & Files
+
 - `faces.db`: SQLite database storing image metadata and face occurrences.
 - `faces.index`: Faiss index file that holds all face embeddings; grows as you process new images.
 - `resources/thumbnails/`: Auto-generated directory of face-crop thumbnails for the GUI.
 - Logging: Console output shows timestamps, module names, and INFO/DEBUG messages.
 
-Contributing
-============
+# Contributing
+
 Contributions are welcome! To help:
+
 1. Fork the repository.
 2. Create a feature branch:
    ```
@@ -82,6 +83,6 @@ Contributions are welcome! To help:
    ```
 4. Open a Pull Request.
 
-License
-=======
+# License
+
 This project is licensed under the MIT License. See the `LICENSE` file for details.
