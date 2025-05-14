@@ -7,3 +7,7 @@ resources
 *.index
 thumbnails
 todo.txt
+
+build
+dist
+main.spec
