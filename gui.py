@@ -1,14 +1,17 @@
 import logging
 import os
+import json
+import subprocess
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QPushButton,
-    QFileDialog, QLabel, QListWidget,
-    QListWidgetItem, QSplitter
+    QFileDialog, QLabel, QListWidget, QListWidgetItem,
+    QSplitter, QMenu, QProgressBar, QAction
 )
-from PyQt5.QtCore import Qt, QSize, QTimer, QThreadPool, QRunnable
+from PyQt5.QtCore import Qt, QSize, QTimer, QThreadPool, QRunnable, QPoint
 from PyQt5.QtGui import QPixmap, QIcon
 from PIL import Image
 import hashlib
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +27,14 @@ class ThumbnailLoader(QRunnable):
         try:
             logger.debug('Generating thumbnail for %s', self.image_path)
             if not os.path.exists(self.image_path):
-                logger.warning('Image file does not exist: %s', self.image_path)
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
             if not os.access(self.image_path, os.R_OK):
-                logger.warning('No read permission for %s', self.image_path)
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
-            stat = os.stat(self.image_path)
-            if stat.st_size == 0:
-                logger.warning('Image file is empty: %s', self.image_path)
+            if os.stat(self.image_path).st_size == 0:
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
@@ -46,7 +45,6 @@ class ThumbnailLoader(QRunnable):
                 img.close()
             pix = QPixmap(self.thumb_path)
             if pix.isNull():
-                logger.warning('Failed to load thumbnail for %s', self.image_path)
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
@@ -61,6 +59,7 @@ class MainWindow(QMainWindow):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
+        self.controller.model = 'hog'
         self.all_image_paths = []
         self.in_filtered_view = False
         self.failed_images = set()
@@ -74,11 +73,19 @@ class MainWindow(QMainWindow):
         self.controller.face_images_ready.connect(self.show_images_for_face)
         self.init_ui()
         logger.info('GUI initialized')
+        self.load_settings()
 
     def init_ui(self):
         self.setWindowTitle('SnapSort')
         self.setGeometry(100, 100, 1000, 700)
         splitter = QSplitter(Qt.Horizontal)
+
+        # Menu bar
+        menubar = self.menuBar()
+        opt_menu = menubar.addMenu('Options')
+        self.model_action = QAction('Use CNN model', self, checkable=True)
+        self.model_action.triggered.connect(self.toggle_model)
+        opt_menu.addAction(self.model_action)
 
         # Left pane: folder selector + gallery
         left_widget = QWidget()
@@ -98,6 +105,9 @@ class MainWindow(QMainWindow):
         self.gallery_list.setResizeMode(QListWidget.Adjust)
         self.gallery_list.itemClicked.connect(self.on_image_clicked)
         self.gallery_list.setMinimumWidth(550)
+        # Context menu
+        self.gallery_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.gallery_list.customContextMenuRequested.connect(self.open_context_menu)
         left_layout.addWidget(self.gallery_list)
         splitter.addWidget(left_widget)
 
@@ -115,11 +125,57 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(splitter)
 
+        # Progress bar
+        self.progress = QProgressBar()
+        self.statusBar().addPermanentWidget(self.progress)
+
         # Load visible thumbnails when scrolling
         self.gallery_list.verticalScrollBar().valueChanged.connect(self._load_visible_thumbnails)
-
-        # Schedule initial load
         QTimer.singleShot(100, self._load_visible_thumbnails)
+
+    def load_settings(self):
+        try:
+            with open('settings.json') as f:
+                data = json.load(f)
+                last = data.get('last_folder')
+                if last and os.path.isdir(last):
+                    self.select_folder(last)
+        except Exception:
+            pass
+
+    def save_settings(self, folder):
+        with open('settings.json', 'w') as f:
+            json.dump({'last_folder': folder}, f)
+
+    def toggle_model(self):
+        self.controller.model = 'cnn' if self.model_action.isChecked() else 'hog'
+
+    def open_context_menu(self, pos: QPoint):
+        item = self.gallery_list.itemAt(pos)
+        if not item: return
+        path = item.data(Qt.UserRole)
+        menu = QMenu()
+        rot = menu.addAction('Rotate 90°')
+        open_file = menu.addAction('Open in Explorer')
+        action = menu.exec_(self.gallery_list.mapToGlobal(pos))
+        if action == rot:
+            try:
+                img = Image.open(path)
+                img = img.rotate(90, expand=True)
+                img.save(path)
+                # remove thumbnail to force regen
+                thumb = self.get_thumbnail_path(path)
+                if os.path.exists(thumb): os.remove(thumb)
+                self._load_visible_thumbnails()
+            except Exception as e:
+                logger.error('Rotate failed: %s', e)
+        elif action == open_file:
+            if os.name == 'nt':
+                os.startfile(os.path.dirname(path))
+            elif sys.platform == 'darwin':
+                subprocess.call(['open', os.path.dirname(path)])
+            else:
+                subprocess.call(['xdg-open', os.path.dirname(path)])
 
     def select_folder(self):
         folder = QFileDialog.getExistingDirectory(self, 'Select Image Folder')
