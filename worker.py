@@ -1,18 +1,14 @@
 import logging
 from face_processing import detect_faces, compute_embedding
-from PIL import Image
+from PIL import Image, ImageOps
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 def process_image(path):
-    """
-    Worker: detect faces and compute embeddings for one image.
-    Returns {'image': path, 'embeddings': [(emb, box), ...]}.
-    """
-    logger.debug('Worker processing: %s', path)
     try:
         img = Image.open(path).convert('RGB')
+        img = ImageOps.exif_transpose(img)  # Correct orientation
         arr = np.array(img)
         boxes = detect_faces(arr)
         embs_and_boxes = []
