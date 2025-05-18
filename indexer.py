@@ -20,7 +20,8 @@ class FaissIndex:
         if self.index.ntotal > 0:
             D, I = self.index.search(vec, 1)
             if D[0][0] < threshold:
-                logger.debug('Found existing ID %d (dist=%.4f)', I[0][0], D[0][0])
+                # TODO: check why isn't this logging?
+                logger.debug('Found existing ID %d (dist=%.4f)', I[0][0], D[0][0]) 
                 return int(I[0][0])
         new_id = self.index.ntotal
         self.index.add(vec)

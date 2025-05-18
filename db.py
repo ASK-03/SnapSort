@@ -67,10 +67,10 @@ class Database:
             JOIN images ON occurrences.image_id = images.id
             WHERE face_id IN ({placeholders})
             GROUP BY images.id
-            HAVING COUNT(DISTINCT face_id) = ?
+            HAVING COUNT(DISTINCT face_id) > 1
         """
 
-        params = face_ids + [len(face_ids)]
+        params = face_ids
 
         with self.lock:
             c = self.conn.cursor()

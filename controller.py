@@ -1,6 +1,5 @@
 import os
 import logging
-import time
 from PyQt5.QtCore import QObject, pyqtSignal
 from multiprocessing import Pool, Manager
 import db, indexer, worker
@@ -11,6 +10,7 @@ class Controller(QObject):
     folder_scanned = pyqtSignal(list)
     faces_ready = pyqtSignal(dict)
     face_images_ready = pyqtSignal(int, list)
+    images_with_all_faces_ready = pyqtSignal(list)
 
     def __init__(self, num_workers=4):
         super().__init__()
@@ -75,21 +75,21 @@ class Controller(QObject):
             self.idx.save()
         except Exception as e:
             logger.error('Error saving Faiss index: %s', e)
-
+            
         self._submit_next_images()  # Schedule next task
 
     def request_faces_in_image(self, image_path):
-        face_ids = self.db.get_faces_in_image(image_path)
-        print("face_ids:", face_ids)
-        self.faces_ready.emit({image_path: face_ids})
+        fids = self.db.get_faces_in_image(image_path)
+        self.faces_ready.emit({image_path: fids})
 
     def request_images_for_face(self, face_id):
         paths = self.db.get_images_with_faces([face_id])
-        if not paths:
-            logger.warning('No images found for face %d', face_id)
-            return
-        logger.info('Images for face %d: %s', face_id, paths)
         self.face_images_ready.emit(face_id, paths)
 
-    # TODO: Implement a method to show all other images where the same people (faces) also appear together.
-    # Update GUI where request_images_for_face is called.  
+    def request_images_with_all_faces(self, image_path):
+        face_ids = self.db.get_faces_in_image(image_path)
+        if not face_ids:
+            self.images_with_all_faces_ready.emit([])
+            return
+        paths = self.db.get_images_with_faces(face_ids)
+        self.images_with_all_faces_ready.emit(paths)

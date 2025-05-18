@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         # Connect signals
         self.controller.folder_scanned.connect(self.show_thumbnails)
         self.controller.faces_ready.connect(self.display_faces_in_image)
+        self.controller.images_with_all_faces_ready.connect(self.display_images_with_all_faces)
         self.controller.face_images_ready.connect(self.show_images_for_face)
         self.init_ui()
         logger.info('GUI initialized')
@@ -78,7 +79,7 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         self.setWindowTitle('SnapSort')
         self.setGeometry(100, 100, 1000, 700)
-        splitter = QSplitter(Qt.Horizontal)
+        main_split = QSplitter(Qt.Horizontal)
 
         # Menu bar
         menubar = self.menuBar()
@@ -105,31 +106,37 @@ class MainWindow(QMainWindow):
         self.gallery_list.setResizeMode(QListWidget.Adjust)
         self.gallery_list.itemClicked.connect(self.on_image_clicked)
         self.gallery_list.setMinimumWidth(550)
-        # Context menu
         self.gallery_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.gallery_list.customContextMenuRequested.connect(self.open_context_menu)
         left_layout.addWidget(self.gallery_list)
-        splitter.addWidget(left_widget)
+        main_split.addWidget(left_widget)
 
-        # Right pane: image viewer + face list
+        # Right pane: image viewer + face list + matching images
         right_split = QSplitter(Qt.Vertical)
         self.viewer_label = QLabel('Select an image')
         self.viewer_label.setAlignment(Qt.AlignCenter)
         right_split.addWidget(self.viewer_label)
+
+        # Face thumbnails
         self.face_list = QListWidget()
         self.face_list.setViewMode(QListWidget.IconMode)
         self.face_list.setIconSize(QSize(80, 80))
         self.face_list.itemClicked.connect(self.on_face_clicked)
         right_split.addWidget(self.face_list)
-        splitter.addWidget(right_split)
 
-        self.setCentralWidget(splitter)
+        # Matching images containing all faces
+        self.matching_list = QListWidget()
+        self.matching_list.setViewMode(QListWidget.IconMode)
+        self.matching_list.setIconSize(QSize(80, 80))
+        self.matching_list.setMinimumHeight(150)
+        right_split.addWidget(self.matching_list)
 
-        # Progress bar
+        main_split.addWidget(right_split)
+        self.setCentralWidget(main_split)
+
+        # Status & progress
         self.progress = QProgressBar()
         self.statusBar().addPermanentWidget(self.progress)
-
-        # Load visible thumbnails when scrolling
         self.gallery_list.verticalScrollBar().valueChanged.connect(self._load_visible_thumbnails)
         QTimer.singleShot(100, self._load_visible_thumbnails)
 
@@ -257,7 +264,9 @@ class MainWindow(QMainWindow):
                 return
             self.viewer_label.setPixmap(pix)
             self.face_list.clear()
+            self.matching_list.clear()
             self.controller.request_faces_in_image(path)
+            self.controller.request_images_with_all_faces(path)
         except Exception as e:
             logger.error('Error displaying image %s: %s', path, e)
             self.viewer_label.setText('Error loading image')
@@ -278,6 +287,22 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.UserRole, fid)
                 self.face_list.addItem(item)
             QTimer.singleShot(0, self.face_list.repaint)
+
+    def display_images_with_all_faces(self, image_paths):
+        self.matching_list.clear()
+        for path in image_paths:
+            if not os.path.exists(path) or not os.access(path, os.R_OK): continue
+            thumb = self.get_thumbnail_path(path)
+            if not os.path.exists(thumb):
+                img = Image.open(path).convert('RGB')
+                img.thumbnail((80,80),Image.Resampling.LANCZOS)
+                img.save(thumb,'JPEG',quality=85)
+                img.close()
+            pix = QPixmap(thumb)
+            it = QListWidgetItem()
+            it.setIcon(QIcon(pix))
+            it.setData(Qt.UserRole, path)
+            self.matching_list.addItem(it)
 
     def on_face_clicked(self, item):
         fid = item.data(Qt.UserRole)
