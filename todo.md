@@ -8,7 +8,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ### 🧠 Core Functionality
 
-- [ ] **Display related images with shared faces**  
+- [x] **Display related images with shared faces**  
        When an image is selected, show all other images where the same people (faces) also appear together.  
        _Hint: Use the existing face-image mapping in the database to retrieve relevant results._
 
@@ -35,7 +35,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 - [ ] **Prevent reprocessing of already indexed images**
 
-  - Before processing, check if the image has already been analyzed using a persistent SQLite index.
+  - Before processing, check if the image has already been analyzed using SQLite index.
 
 - [ ] **Robust and consistent face ID generation**
 
