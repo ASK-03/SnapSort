@@ -22,6 +22,7 @@ class FaissIndex:
             if D[0][0] < threshold:
                 # TODO: check why isn't this logging?
                 logger.debug('Found existing ID %d (dist=%.4f)', I[0][0], D[0][0]) 
+                print('Found existing ID %d (dist=%.4f)', I[0][0], D[0][0]) # for debugging until logging works
                 return int(I[0][0])
         new_id = self.index.ntotal
         self.index.add(vec)
