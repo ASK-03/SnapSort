@@ -127,8 +127,9 @@ class MainWindow(QMainWindow):
         # Matching images containing all faces
         self.matching_list = QListWidget()
         self.matching_list.setViewMode(QListWidget.IconMode)
-        self.matching_list.setIconSize(QSize(80, 80))
+        self.matching_list.setIconSize(QSize(100, 100))
         self.matching_list.setMinimumHeight(150)
+        self.matching_list.itemClicked.connect(self.on_image_clicked)
         right_split.addWidget(self.matching_list)
 
         main_split.addWidget(right_split)
