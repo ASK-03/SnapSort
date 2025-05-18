@@ -33,6 +33,53 @@ class Database:
             c.execute('INSERT INTO occurrences VALUES(?,?,?,?,?,?)', (img_id, face_id, *box))
             self.conn.commit()
 
+    def get_faces_in_image(self, image_path):
+        if not image_path:
+            return []
+        
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute('SELECT id FROM images WHERE path=?', (image_path,))
+            img_id = c.fetchone()[0]
+            if not img_id:
+                return []
+            c.execute('''
+                SELECT face_id
+                FROM occurrences
+                WHERE image_id = ?
+            ''', (img_id,))
+            rows = c.fetchall()
+            face_ids = []
+            for face_id in rows:
+                face_ids.append(face_id[0])
+            return face_ids
+        
+
+    def get_images_with_faces(self, face_ids):
+        if not face_ids:
+            return []
+
+        placeholders = ",".join("?" for _ in face_ids)
+
+        query = f"""
+            SELECT images.path
+            FROM occurrences
+            JOIN images ON occurrences.image_id = images.id
+            WHERE face_id IN ({placeholders})
+            GROUP BY images.id
+            HAVING COUNT(DISTINCT face_id) = ?
+        """
+
+        params = face_ids + [len(face_ids)]
+
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(query, params)
+            rows = c.fetchall()
+
+        return [row[0] for row in rows]
+
+
     def get_face_thumbnail(self, face_id):
         thumb_dir = 'resources/thumbnails'
         os.makedirs(thumb_dir, exist_ok=True)

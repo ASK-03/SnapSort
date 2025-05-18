@@ -12,7 +12,7 @@ class Controller(QObject):
     faces_ready = pyqtSignal(dict)
     face_images_ready = pyqtSignal(int, list)
 
-    def __init__(self, num_workers=3):
+    def __init__(self, num_workers=4):
         super().__init__()
         self.num_workers = num_workers
         logger.info('Initializing Controller with %d workers', self.num_workers)
@@ -63,6 +63,7 @@ class Controller(QObject):
         img_path = result['image']
         embs_and_boxes = result.get('embeddings', [])
         face_ids = []
+        # TODO: what if no embeddings?
         for emb, box in embs_and_boxes:
             fid = self.idx.find_or_add(emb)
             face_ids.append(fid)
@@ -78,10 +79,17 @@ class Controller(QObject):
         self._submit_next_images()  # Schedule next task
 
     def request_faces_in_image(self, image_path):
-        face_ids = self.image_to_faces.get(image_path, [])
+        face_ids = self.db.get_faces_in_image(image_path)
+        print("face_ids:", face_ids)
         self.faces_ready.emit({image_path: face_ids})
 
     def request_images_for_face(self, face_id):
-        paths = [p for p, fids in self.image_to_faces.items() if face_id in fids]
+        paths = self.db.get_images_with_faces([face_id])
+        if not paths:
+            logger.warning('No images found for face %d', face_id)
+            return
         logger.info('Images for face %d: %s', face_id, paths)
         self.face_images_ready.emit(face_id, paths)
+
+    # TODO: Implement a method to show all other images where the same people (faces) also appear together.
+    # Update GUI where request_images_for_face is called.  
