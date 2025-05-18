@@ -273,6 +273,11 @@ class MainWindow(QMainWindow):
             self.viewer_label.setText('Error loading image')
 
     def display_faces_in_image(self, image_faces):
+        if not image_faces:
+            logger.info('No faces found in image')
+            self.face_list.clear()
+            return
+        
         for path, face_ids in image_faces.items():
             logger.info('Displaying %d faces for %s', len(face_ids), path)
             self.face_list.clear()
@@ -290,6 +295,11 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.face_list.repaint)
 
     def display_images_with_all_faces(self, image_paths):
+        if not image_paths:
+            logger.info('No images with all faces found')
+            self.matching_list.clear()
+            return
+        
         self.matching_list.clear()
         for path in image_paths:
             if not os.path.exists(path) or not os.access(path, os.R_OK): continue

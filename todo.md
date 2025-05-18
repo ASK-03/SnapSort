@@ -33,7 +33,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
   - This is a temporary solution. The images should be retrieved from the database to ensure persistence and reliability.
 
-- [ ] **Prevent reprocessing of already indexed images**
+- [x] **Prevent reprocessing of already indexed images**
 
   - Before processing, check if the image has already been analyzed using SQLite index.
 
