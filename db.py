@@ -40,7 +40,10 @@ class Database:
         with self.lock:
             c = self.conn.cursor()
             c.execute('SELECT id FROM images WHERE path=?', (image_path,))
-            img_id = c.fetchone()[0] if c.fetchone() else None
+            img_id = c.fetchone()
+            if not img_id:
+                return []
+            img_id = img_id[0]
             if not img_id:
                 return []
             c.execute('''
