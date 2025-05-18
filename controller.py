@@ -88,7 +88,7 @@ class Controller(QObject):
         self.faces_ready.emit({image_path: fids})
 
     def request_images_for_face(self, face_id):
-        paths = self.db.get_images_with_faces([face_id])
+        paths = self.db.get_images_with_face(face_id)
         self.face_images_ready.emit(face_id, paths)
 
     def request_images_with_all_faces(self, image_path):

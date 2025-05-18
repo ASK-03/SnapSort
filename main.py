@@ -13,7 +13,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
-    logger.info('Starting Face Viewer & Sorter')
+    logger.info('Starting SnapSort')
     app = QApplication(sys.argv)
     controller = Controller(num_workers=4)
     window = MainWindow(controller)

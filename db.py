@@ -56,7 +56,25 @@ class Database:
             for face_id in rows:
                 face_ids.append(face_id[0])
             return face_ids
-        
+
+    def get_images_with_face(self, face_id):
+        """
+        Retrieve all unique image paths that contain the specified face_id.
+        """
+        if face_id is None:
+            return []
+
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute('''
+                SELECT DISTINCT images.path
+                FROM occurrences
+                JOIN images ON occurrences.image_id = images.id
+                WHERE face_id = ?
+            ''', (face_id,))
+            rows = c.fetchall()
+
+        return [row[0] for row in rows]      
 
     def get_images_with_faces(self, face_ids):
         if not face_ids:
@@ -81,6 +99,7 @@ class Database:
             rows = c.fetchall()
 
         return [row[0] for row in rows]
+    
 
     def get_processed_images(self):
         """
