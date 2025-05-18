@@ -79,6 +79,20 @@ class Database:
 
         return [row[0] for row in rows]
 
+    def get_processed_images(self):
+        """
+        Return a set of image paths already indexed in occurrences.
+        """
+        query = """
+                SELECT DISTINCT images.path
+                FROM occurrences
+                JOIN images ON occurrences.image_id = images.id
+        """
+
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(query)
+        return {row[0] for row in c.fetchall()}
 
     def get_face_thumbnail(self, face_id):
         thumb_dir = 'resources/thumbnails'

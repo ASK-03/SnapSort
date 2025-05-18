@@ -30,16 +30,21 @@ class Controller(QObject):
 
     def scan_folder(self, folder_path):
         logger.info('Scanning folder: %s', folder_path)
-        image_paths = []
+        all_image_paths = []
         for root, _, files in os.walk(folder_path):
             for fn in files:
                 if fn.lower().endswith(('.jpg', '.png', '.jpeg')):
-                    image_paths.append(os.path.join(root, fn))
+                    all_image_paths.append(os.path.join(root, fn))
 
-        logger.info('Found %d images', len(image_paths))
-        self.folder_scanned.emit(image_paths)
+        # Filter out already processed images efficiently
+        processed = self.db.get_processed_images()
+        new_images = [p for p in all_image_paths if p not in processed]
 
-        self.image_queue = image_paths
+        logger.info('Found %d total images, %d new to index',
+                    len(all_image_paths), len(new_images))
+        
+        self.folder_scanned.emit(all_image_paths)
+        self.image_queue = new_images
         self._submit_next_images()
 
     def _submit_next_images(self):
@@ -75,7 +80,7 @@ class Controller(QObject):
             self.idx.save()
         except Exception as e:
             logger.error('Error saving Faiss index: %s', e)
-            
+
         self._submit_next_images()  # Schedule next task
 
     def request_faces_in_image(self, image_path):
