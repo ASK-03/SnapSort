@@ -4,7 +4,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ---
 
-## 🔁 Version 2.0 Plan
+## 🔁 Version 1.0.0 Plan
 
 ### 🧠 Core Functionality
 
@@ -12,11 +12,17 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
        When an image is selected, show all other images where the same people (faces) also appear together.  
        _Hint: Use the existing face-image mapping in the database to retrieve relevant results._
 
----
+### Installers
+
+- [x] **Create installers for Windows, Linux, and macOS**  
+       Use `PyInstaller` or `Briefcase` to package the application for each platform.  
+       _Hint: Ensure all dependencies are included in the installer._
 
 ---
 
-## 🔁 Version 3.0 Plan
+---
+
+## 🔁 Version 2.0.0 Plan
 
 ### 🧠 Core Functionality
 
@@ -111,7 +117,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ### 🚀 Deployment & CI/CD
 
-- [ ] **Add GitHub Action to build & deploy desktop app**
+- [x] **Add GitHub Action to build & deploy desktop app**
   - Use [PyInstaller](https://pyinstaller.org/) or [Briefcase](https://beeware.org/project/projects/tools/briefcase/) to package as a desktop app.
   - Auto-generate platform-specific installers (Windows, Linux, macOS).
   - Set up GitHub CI workflow for releases.

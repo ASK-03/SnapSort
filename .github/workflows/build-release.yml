@@ -1,16 +1,8 @@
 name: Build SnapSort
 
 on:
-  workflow_dispatch: # Allows manual triggering from GitHub Actions UI
-    inputs:
-      version:
-        description: "Release version (e.g., v1.0.0)"
-        required: true
-        default: "v1.0.0"
-      prerelease:
-        description: "Is this a prerelease?"
-        type: boolean
-        default: false
+  release:
+    types: [published] # Triggers when a release is published
 
 jobs:
   build:
@@ -71,42 +63,12 @@ jobs:
           zip -r ../SnapSort-Linux.zip *
         shell: bash
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SnapSort-${{ matrix.os }}
-          path: |
-            dist/**
-            SnapSort-*.zip
-
-  create-release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create Release
-        id: create_release
+      - name: Upload build to release
         uses: softprops/action-gh-release@v1
+        if: success()
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: SnapSort ${{ github.event.inputs.version }}
-          body: |
-            SnapSort ${{ github.event.inputs.version }}
-
-            ## Platform-specific builds
-            - Windows: SnapSort-Windows.zip
-            - macOS: SnapSort-macOS.zip
-            - Linux: SnapSort-Linux.zip
-          draft: false
-          prerelease: ${{ github.event.inputs.prerelease }}
           files: |
-            artifacts/SnapSort-windows-latest/SnapSort-Windows.zip
-            artifacts/SnapSort-macos-latest/SnapSort-macOS.zip
-            artifacts/SnapSort-ubuntu-latest/SnapSort-Linux.zip
+            SnapSort-*.zip
+          tag_name: ${{ github.ref_name }} # Uses the existing tag name
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
