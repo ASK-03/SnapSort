@@ -1,0 +1,112 @@
+name: Build SnapSort
+
+on:
+  workflow_dispatch: # Allows manual triggering from GitHub Actions UI
+    inputs:
+      version:
+        description: "Release version (e.g., v1.0.0)"
+        required: true
+        default: "v1.0.0"
+      prerelease:
+        description: "Is this a prerelease?"
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            pyinstaller main.py -F --collect-all face_recognition_models --name SnapSort.exe
+          else
+            pyinstaller main.py -F --collect-all face_recognition_models --name SnapSort
+          fi
+        shell: bash
+
+      - name: Rename and package executable for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir release-package
+          copy dist\SnapSort.exe release-package\SnapSort.exe
+          cd release-package
+          7z a -tzip ..\SnapSort-Windows.zip *
+        shell: cmd
+
+      - name: Rename and package executable for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir release-package
+          cp dist/SnapSort release-package/SnapSort
+          chmod +x release-package/SnapSort
+          cd release-package
+          zip -r ../SnapSort-macOS.zip *
+        shell: bash
+
+      - name: Rename and package executable for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir release-package
+          cp dist/SnapSort release-package/SnapSort
+          chmod +x release-package/SnapSort
+          cd release-package
+          zip -r ../SnapSort-Linux.zip *
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SnapSort-${{ matrix.os }}
+          path: |
+            dist/**
+            SnapSort-*.zip
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: SnapSort ${{ github.event.inputs.version }}
+          body: |
+            SnapSort ${{ github.event.inputs.version }}
+
+            ## Platform-specific builds
+            - Windows: SnapSort-Windows.zip
+            - macOS: SnapSort-macOS.zip
+            - Linux: SnapSort-Linux.zip
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
+          files: |
+            artifacts/SnapSort-windows-latest/SnapSort-Windows.zip
+            artifacts/SnapSort-macos-latest/SnapSort-macOS.zip
+            artifacts/SnapSort-ubuntu-latest/SnapSort-Linux.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
