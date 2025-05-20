@@ -13,6 +13,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.freeze_support()
+    # freeze_support() is needed for PyInstaller to work correctly on Windows
+
     logger.info('Starting SnapSort')
     app = QApplication(sys.argv)
     controller = Controller(num_workers=4)
