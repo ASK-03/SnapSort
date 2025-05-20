@@ -31,9 +31,9 @@ jobs:
       - name: Build with PyInstaller
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            pyinstaller main.py -F --collect-all face_recognition_models --name SnapSort.exe
+            pyinstaller main.py -F --windowed --noconfirm --collect-all face_recognition_models --name SnapSort.exe
           else
-            pyinstaller main.py -F --collect-all face_recognition_models --name SnapSort
+            pyinstaller main.py -F --noconfirm --collect-all face_recognition_models --name SnapSort
           fi
         shell: bash
 
@@ -41,10 +41,10 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           mkdir release-package
-          copy dist\SnapSort.exe release-package\SnapSort.exe
-          cd release-package
-          7z a -tzip ..\SnapSort-Windows.zip *
-        shell: cmd
+          Copy-Item "dist\\SnapSort.exe" -Destination "release-package\\SnapSort.exe"
+          Set-Location release-package
+          Compress-Archive -Path * -DestinationPath ..\\SnapSort-Windows.zip
+        shell: pwsh
 
       - name: Rename and package executable for macOS
         if: matrix.os == 'macos-latest'
@@ -72,6 +72,6 @@ jobs:
         with:
           files: |
             SnapSort-*.zip
-          tag_name: ${{ github.ref_name }} # Uses the existing tag name
+          tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
