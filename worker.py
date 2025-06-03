@@ -5,9 +5,10 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
 def process_image(path):
     try:
-        img = Image.open(path).convert('RGB')
+        img = Image.open(path).convert("RGB")
         img = ImageOps.exif_transpose(img)  # Correct orientation
         arr = np.array(img)
         boxes = detect_faces(arr)
@@ -16,7 +17,7 @@ def process_image(path):
             crop = img.crop((box[0], box[1], box[2], box[3]))
             emb = compute_embedding(np.array(crop))
             embs_and_boxes.append((emb, box))
-        return {'image': path, 'embeddings': embs_and_boxes}
+        return {"image": path, "embeddings": embs_and_boxes}
     except Exception as e:
-        logger.error('Error processing %s: %s', path, e)
-        return {'image': path, 'embeddings': []}
+        logger.error("Error processing %s: %s", path, e)
+        return {"image": path, "embeddings": []}

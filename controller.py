@@ -6,6 +6,7 @@ import db, indexer, worker
 
 logger = logging.getLogger(__name__)
 
+
 class Controller(QObject):
     folder_scanned = pyqtSignal(list)
     faces_ready = pyqtSignal(dict)
@@ -15,10 +16,10 @@ class Controller(QObject):
     def __init__(self, num_workers=4):
         super().__init__()
         self.num_workers = num_workers
-        logger.info('Initializing Controller with %d workers', self.num_workers)
+        logger.info("Initializing Controller with %d workers", self.num_workers)
 
-        self.db = db.Database('faces.db')
-        self.idx = indexer.FaissIndex('faces.index')
+        self.db = db.Database("faces.db")
+        self.idx = indexer.FaissIndex("faces.index")
         self.pool = Pool(processes=self.num_workers)
         self.manager = Manager()
         self.image_to_faces = self.manager.dict()
@@ -29,20 +30,23 @@ class Controller(QObject):
         self.image_queue = []
 
     def scan_folder(self, folder_path):
-        logger.info('Scanning folder: %s', folder_path)
+        logger.info("Scanning folder: %s", folder_path)
         all_image_paths = []
         for root, _, files in os.walk(folder_path):
             for fn in files:
-                if fn.lower().endswith(('.jpg', '.png', '.jpeg')):
+                if fn.lower().endswith((".jpg", ".png", ".jpeg")):
                     all_image_paths.append(os.path.join(root, fn))
 
         # Filter out already processed images efficiently
         processed = self.db.get_processed_images()
         new_images = [p for p in all_image_paths if p not in processed]
 
-        logger.info('Found %d total images, %d new to index',
-                    len(all_image_paths), len(new_images))
-        
+        logger.info(
+            "Found %d total images, %d new to index",
+            len(all_image_paths),
+            len(new_images),
+        )
+
         self.folder_scanned.emit(all_image_paths)
         self.image_queue = new_images
         self._submit_next_images()
@@ -55,18 +59,18 @@ class Controller(QObject):
                 worker.process_image,
                 args=(path,),
                 callback=self._handle_image_result,
-                error_callback=self._handle_worker_error
+                error_callback=self._handle_worker_error,
             )
 
     def _handle_worker_error(self, e):
-        logger.error('Worker error: %s', e)
+        logger.error("Worker error: %s", e)
         self.pending_tasks -= 1
         self._submit_next_images()
 
     def _handle_image_result(self, result):
         self.pending_tasks -= 1
-        img_path = result['image']
-        embs_and_boxes = result.get('embeddings', [])
+        img_path = result["image"]
+        embs_and_boxes = result.get("embeddings", [])
         face_ids = []
         # TODO: what if no embeddings?
         for emb, box in embs_and_boxes:
@@ -74,12 +78,12 @@ class Controller(QObject):
             face_ids.append(fid)
             self.db.insert_occurrence(img_path, fid, box)
         self.image_to_faces[img_path] = face_ids
-        logger.debug('Indexed %s: %s', img_path, face_ids)
+        logger.debug("Indexed %s: %s", img_path, face_ids)
 
         try:
             self.idx.save()
         except Exception as e:
-            logger.error('Error saving Faiss index: %s', e)
+            logger.error("Error saving Faiss index: %s", e)
 
         self._submit_next_images()  # Schedule next task
 

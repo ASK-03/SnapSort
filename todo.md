@@ -43,11 +43,6 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
   - Before processing, check if the image has already been analyzed using SQLite index.
 
-- [ ] **Robust and consistent face ID generation**
-
-  - Ensure face IDs remain stable even if the face index or database is modified or corrupted.
-  - Recommended: Use hash of face encoding or assign UUID-based IDs tied to thumbnails.
-
 - [ ] **Improve recognition accuracy and speed**
 
   - Replace or upgrade current face recognition model.
