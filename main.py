@@ -2,7 +2,7 @@ import sys
 import logging
 from PyQt5.QtWidgets import QApplication
 from controller import Controller
-from gui import MainWindow
+from gui.main_window import MainWindow
 
 # Configure logging
 logging.basicConfig(

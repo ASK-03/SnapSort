@@ -1,9 +1,7 @@
 import logging
 import os
-import json
 import subprocess
 from PyQt5.QtWidgets import (
-    QApplication,
     QMainWindow,
     QWidget,
     QVBoxLayout,
@@ -17,8 +15,8 @@ from PyQt5.QtWidgets import (
     QProgressBar,
     QAction,
     QActionGroup,
-    QMenuBar,
     QStatusBar,
+    QApplication,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThreadPool, QRunnable, QPoint
 from PyQt5.QtGui import QPixmap, QIcon, QPalette, QColor, QFont
@@ -26,9 +24,12 @@ from PIL import Image
 import hashlib
 import sys
 
+# Use a relative import for the MergeFacesDialog
+from .merge_faces_dialog import MergeFacesDialog
+
 logger = logging.getLogger(__name__)
 
-# Define dark and light styles, including menu bar and status bar
+# Dark and Light stylesheets
 DARK_STYLESHEET = """
     QMainWindow { background-color: #2D2D2D; }
     QMenuBar { background-color: #2D2D2D; color: #FFFFFF; }
@@ -103,6 +104,11 @@ LIGHT_STYLESHEET = """
 
 
 class ThumbnailLoader(QRunnable):
+    """
+    Worker that generates a 100×100 thumbnail for a given image path,
+    then invokes callback(image_path, QPixmap) or callback(image_path, None) on failure.
+    """
+
     def __init__(self, image_path, thumb_path, callback, failed_images):
         super().__init__()
         self.image_path = image_path
@@ -112,7 +118,6 @@ class ThumbnailLoader(QRunnable):
 
     def run(self):
         try:
-            logger.debug("Generating thumbnail for %s", self.image_path)
             if (
                 not os.path.exists(self.image_path)
                 or not os.access(self.image_path, os.R_OK)
@@ -121,18 +126,20 @@ class ThumbnailLoader(QRunnable):
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
+
             if not os.path.exists(self.thumb_path):
                 img = Image.open(self.image_path).convert("RGB")
                 img.thumbnail((100, 100), Image.Resampling.LANCZOS)
                 img.save(self.thumb_path, "JPEG", quality=85)
                 img.close()
+
             pix = QPixmap(self.thumb_path)
             if pix.isNull():
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
+
             self.callback(self.image_path, pix)
-            logger.debug("Thumbnail loaded for %s", self.image_path)
         except Exception as e:
             logger.error("Error generating thumbnail for %s: %s", self.image_path, e)
             self.failed_images.add(self.image_path)
@@ -149,21 +156,22 @@ class MainWindow(QMainWindow):
         self.failed_images = set()
         self.thumbnail_dir = os.path.join(os.path.dirname(__file__), "thumbnails")
         os.makedirs(self.thumbnail_dir, exist_ok=True)
+
         self.threadpool = QThreadPool()
         self.threadpool.setMaxThreadCount(2)
 
-        # Connect signals
+        # Connect controller signals
         self.controller.folder_scanned.connect(self.show_thumbnails)
         self.controller.faces_ready.connect(self.display_faces_in_image)
         self.controller.images_with_all_faces_ready.connect(
             self.display_images_with_all_faces
         )
         self.controller.face_images_ready.connect(self.show_images_for_face)
+
         self.init_ui()
         logger.info("GUI initialized")
-        self.load_settings()
 
-        # At startup, default to dark theme
+        # Default to dark theme
         self.apply_dark_theme()
 
     def init_ui(self):
@@ -176,14 +184,19 @@ class MainWindow(QMainWindow):
 
         # Menu bar
         menubar = self.menuBar()
-        # Model option
+
+        # Options menu (model & merge faces)
         opt_menu = menubar.addMenu("Options")
         self.model_action = QAction("Use CNN model", self)
         self.model_action.setCheckable(True)
         self.model_action.triggered.connect(self.toggle_model)
         opt_menu.addAction(self.model_action)
 
-        # Theme menu
+        self.merge_faces_action = QAction("Merge Faces", self)
+        self.merge_faces_action.triggered.connect(self.open_merge_faces_dialog)
+        opt_menu.addAction(self.merge_faces_action)
+
+        # Theme menu (dark/light)
         theme_menu = menubar.addMenu("Theme")
         self.action_dark = QAction("Dark Mode", self, checkable=True)
         self.action_light = QAction("Light Mode", self, checkable=True)
@@ -196,7 +209,7 @@ class MainWindow(QMainWindow):
         self.action_light.triggered.connect(self.apply_light_theme)
         self.action_dark.setChecked(True)
 
-        # Main splitter
+        # Main horizontal splitter: left = folder selector + gallery, right = viewer + faces + matches
         main_split = QSplitter(Qt.Horizontal)
         main_split.setHandleWidth(5)
 
@@ -219,26 +232,25 @@ class MainWindow(QMainWindow):
         self.gallery_list.setViewMode(QListWidget.IconMode)
         self.gallery_list.setIconSize(QSize(100, 100))
         self.gallery_list.setResizeMode(QListWidget.Adjust)
-        self.gallery_list.setFlow(QListWidget.LeftToRight)  # force flow
-        self.gallery_list.setWrapping(True)  # enable wrapping immediately
-        self.gallery_list.setGridSize(QSize(110, 110))  # ensure uniform grid spacing
+        self.gallery_list.setFlow(QListWidget.LeftToRight)
+        self.gallery_list.setWrapping(True)
+        self.gallery_list.setGridSize(QSize(110, 110))
         self.gallery_list.itemClicked.connect(self.on_image_clicked)
         self.gallery_list.setMinimumWidth(550)
         self.gallery_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.gallery_list.customContextMenuRequested.connect(self.open_context_menu)
         left_layout.addWidget(self.gallery_list)
+
         main_split.addWidget(left_widget)
 
-        # Right pane: image viewer + face list + matching images
+        # Right pane: vertical splitter
         right_split = QSplitter(Qt.Vertical)
         right_split.setHandleWidth(5)
         right_split.setContentsMargins(10, 10, 10, 10)
 
         self.viewer_label = QLabel("Select an image")
         self.viewer_label.setAlignment(Qt.AlignCenter)
-        self.viewer_label.setStyleSheet(
-            "border: 1px solid;"
-        )  # border color follows theme
+        self.viewer_label.setStyleSheet("border: 1px solid;")
         right_split.addWidget(self.viewer_label)
 
         self.face_list = QListWidget()
@@ -262,11 +274,13 @@ class MainWindow(QMainWindow):
         main_split.addWidget(right_split)
         self.setCentralWidget(main_split)
 
-        # Status & progress
+        # Status bar & progress bar
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
         self.progress = QProgressBar()
         self.statusBar.addPermanentWidget(self.progress)
+
+        # Lazy‐load thumbnails when scrolling
         self.gallery_list.verticalScrollBar().valueChanged.connect(
             self._load_visible_thumbnails
         )
@@ -310,24 +324,25 @@ class MainWindow(QMainWindow):
         app.setStyleSheet(DARK_STYLESHEET)
         self.action_dark.setChecked(True)
 
-    def load_settings(self):
-        try:
-            with open("settings.json") as f:
-                data = json.load(f)
-                last = data.get("last_folder")
-                if last and os.path.isdir(last):
-                    self.select_folder(last)
-        except Exception:
-            pass
-
-    def save_settings(self, folder):
-        with open("settings.json", "w") as f:
-            json.dump({"last_folder": folder}, f)
-
     def toggle_model(self):
+        """
+        Switch between 'hog' and 'cnn' face_detection models.
+        """
         self.controller.model = "cnn" if self.model_action.isChecked() else "hog"
 
+    def open_merge_faces_dialog(self):
+        """
+        Launch the MergeFacesDialog in modal mode.
+        """
+        dlg = MergeFacesDialog(self.controller, parent=self)
+        dlg.exec_()
+
     def open_context_menu(self, pos: QPoint):
+        """
+        Right-click context menu on gallery thumbnails:
+        - Rotate 90°
+        - Open folder in explorer
+        """
         item = self.gallery_list.itemAt(pos)
         if not item:
             return
@@ -356,13 +371,22 @@ class MainWindow(QMainWindow):
                 subprocess.call(["xdg-open", os.path.dirname(path)])
 
     def select_folder(self):
+        """
+        Show a folder‐picker dialog, then clear gallery and scan the folder.
+        """
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if folder:
             logger.info("Folder selected: %s", folder)
             self.clear_gallery()
             self.controller.scan_folder(folder)
+        else:
+            logger.info("No folder selected or dialog canceled.")
 
     def show_thumbnails(self, image_paths):
+        """
+        Called when controller.folder_scanned emits. Populate gallery with placeholders,
+        then trigger lazy thumbnail loading.
+        """
         logger.info("Preparing %d thumbnails for lazy loading", len(image_paths))
         self.clear_gallery()
         self.all_image_paths = image_paths
@@ -377,13 +401,14 @@ class MainWindow(QMainWindow):
             item.setData(Qt.UserRole, path)
             item.setIcon(QIcon("placeholder.png"))
             self.gallery_list.addItem(item)
-        logger.debug("Added %d items to gallery_list", self.gallery_list.count())
 
         QTimer.singleShot(0, self._load_visible_thumbnails)
         QTimer.singleShot(50, self.gallery_list.repaint)
 
     def _load_visible_thumbnails(self):
-        logger.debug("Checking for visible thumbnails")
+        """
+        Determine which gallery items are visible (±10) and start ThumbnailLoader for each.
+        """
         first_visible = self.gallery_list.indexAt(
             self.gallery_list.rect().topLeft()
         ).row()
@@ -412,6 +437,9 @@ class MainWindow(QMainWindow):
                 self.threadpool.start(loader)
 
     def _thumbnail_loaded(self, image_path, pixmap):
+        """
+        Callback from ThumbnailLoader. Update the QListWidgetItem icon.
+        """
         for row in range(self.gallery_list.count()):
             item = self.gallery_list.item(row)
             if item and item.data(Qt.UserRole) == image_path:
@@ -420,20 +448,23 @@ class MainWindow(QMainWindow):
                 else:
                     item.setIcon(QIcon(pixmap))
                 break
-        logger.debug("Updated thumbnail for %s", image_path)
         QTimer.singleShot(0, self.gallery_list.repaint)
 
     def get_thumbnail_path(self, image_path):
+        """
+        Compute a stable MD5‐based filename under 'gui/thumbnails/' for caching.
+        """
         hash_val = hashlib.md5(image_path.encode()).hexdigest()
         return os.path.join(self.thumbnail_dir, f"{hash_val}.jpg")
 
     def on_image_clicked(self, item):
+        """
+        Display the clicked image, then request its faces and images_with_all_faces.
+        """
         path = item.data(Qt.UserRole)
-        logger.info("Image clicked: %s", path)
         try:
             pix = QPixmap(path).scaled(500, 500, Qt.KeepAspectRatio)
             if pix.isNull():
-                logger.warning("Failed to load image for display: %s", path)
                 self.viewer_label.setText("Failed to load image")
                 return
             self.viewer_label.setPixmap(pix)
@@ -446,19 +477,18 @@ class MainWindow(QMainWindow):
             self.viewer_label.setText("Error loading image")
 
     def display_faces_in_image(self, image_faces):
-        if not image_faces:
-            logger.info("No faces found in image")
-            self.face_list.clear()
-            return
-
+        """
+        Received from controller.faces_ready: { image_path: [face_ids] }.
+        Load each face thumbnail and add to face_list.
+        """
+        self.face_list.clear()
         for path, face_ids in image_faces.items():
-            logger.info("Displaying %d faces for %s", len(face_ids), path)
-            self.face_list.clear()
+            if not face_ids:
+                return
             for fid in face_ids:
                 thumb = self.controller.db.get_face_thumbnail(fid)
-                pix = QPixmap(thumb)
+                pix = QPixmap(thumb) if thumb else QPixmap()
                 if pix.isNull():
-                    logger.warning("Failed to load face thumbnail for face ID %s", fid)
                     continue
                 pix = pix.scaled(80, 80, Qt.KeepAspectRatio)
                 item = QListWidgetItem()
@@ -468,11 +498,10 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self.face_list.repaint)
 
     def display_images_with_all_faces(self, image_paths):
-        if not image_paths:
-            logger.info("No images with all faces found")
-            self.matching_list.clear()
-            return
-
+        """
+        Received from controller.images_with_all_faces_ready: list of image paths.
+        Display each as a thumbnail in matching_list.
+        """
         self.matching_list.clear()
         for path in image_paths:
             if not os.path.exists(path) or not os.access(path, os.R_OK):
@@ -490,12 +519,16 @@ class MainWindow(QMainWindow):
             self.matching_list.addItem(it)
 
     def on_face_clicked(self, item):
+        """
+        When a face thumbnail is clicked, request all images containing that face.
+        """
         fid = item.data(Qt.UserRole)
-        logger.info("Face clicked: %s", fid)
         self.controller.request_images_for_face(fid)
 
     def show_images_for_face(self, face_id, paths):
-        logger.info("Showing %d images for face %s: %s", len(paths), face_id, paths)
+        """
+        Received from controller.face_images_ready: clear gallery and show only those images.
+        """
         self.clear_gallery()
         self.in_filtered_view = True
         self.btn_back.show()
@@ -507,19 +540,18 @@ class MainWindow(QMainWindow):
             item.setData(Qt.UserRole, path)
             item.setIcon(QIcon("placeholder.png"))
             self.gallery_list.addItem(item)
-        logger.debug(
-            "Added %d items to gallery_list for face %s",
-            self.gallery_list.count(),
-            face_id,
-        )
         QTimer.singleShot(0, self._load_visible_thumbnails)
         QTimer.singleShot(50, self.gallery_list.repaint)
 
     def back_to_gallery(self):
-        logger.info("Returning to full gallery")
+        """
+        Return to showing all images.
+        """
         self.show_thumbnails(self.all_image_paths)
 
     def clear_gallery(self):
+        """
+        Clear gallery_list and reset failed_images set.
+        """
         self.gallery_list.clear()
         self.failed_images.clear()
-        logger.debug("Gallery cleared")
