@@ -3,17 +3,90 @@ import os
 import json
 import subprocess
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QPushButton,
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton,
     QFileDialog, QLabel, QListWidget, QListWidgetItem,
-    QSplitter, QMenu, QProgressBar, QAction
+    QSplitter, QMenu, QProgressBar, QAction, QActionGroup, QMenuBar, QStatusBar
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThreadPool, QRunnable, QPoint
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap, QIcon, QPalette, QColor, QFont
 from PIL import Image
 import hashlib
 import sys
 
 logger = logging.getLogger(__name__)
+
+# Define dark and light styles, including menu bar and status bar
+DARK_STYLESHEET = """
+    QMainWindow { background-color: #2D2D2D; }
+    QMenuBar { background-color: #2D2D2D; color: #FFFFFF; }
+    QMenuBar::item { background-color: #2D2D2D; color: #FFFFFF; padding: 4px 10px; }
+    QMenuBar::item:selected { background-color: #383838; }
+    QMenu { background-color: #2D2D2D; color: #FFFFFF; border: 1px solid #5A5A5A; }
+    QMenu::item:selected { background-color: #6464FA; }
+    QPushButton {
+        background-color: #5A5A5A;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 5px;
+        color: #FFFFFF;
+    }
+    QPushButton:hover {
+        background-color: #6E6E6E;
+    }
+    QListWidget {
+        background-color: #383838;
+        border: none;
+        padding: 5px;
+        color: #FFFFFF;
+    }
+    QListWidget::item { margin: 5px; }
+    QProgressBar {
+        background-color: #2D2D2D;
+        border: 1px solid #5A5A5A;
+        border-radius: 5px;
+        text-align: center;
+        color: #FFFFFF;
+    }
+    QProgressBar::chunk { background-color: #6464FA; border-radius: 5px; }
+    QLabel { color: #FFFFFF; }
+    QStatusBar { background-color: #2D2D2D; color: #FFFFFF; }
+    QSplitter::handle { background-color: #2D2D2D; }
+"""
+
+LIGHT_STYLESHEET = """
+    QMainWindow { background-color: #F0F0F0; }
+    QMenuBar { background-color: #F0F0F0; color: #000000; }
+    QMenuBar::item { background-color: #F0F0F0; color: #000000; padding: 4px 10px; }
+    QMenuBar::item:selected { background-color: #E0E0E0; }
+    QMenu { background-color: #FFFFFF; color: #000000; border: 1px solid #CCCCCC; }
+    QMenu::item:selected { background-color: #3465A4; color: #FFFFFF; }
+    QPushButton {
+        background-color: #FFFFFF;
+        border: 1px solid #CCCCCC;
+        padding: 8px 12px;
+        border-radius: 5px;
+        color: #000000;
+    }
+    QPushButton:hover { background-color: #E5E5E5; }
+    QListWidget {
+        background-color: #FFFFFF;
+        border: 1px solid #CCCCCC;
+        padding: 5px;
+        color: #000000;
+    }
+    QListWidget::item { margin: 5px; }
+    QProgressBar {
+        background-color: #FFFFFF;
+        border: 1px solid #CCCCCC;
+        border-radius: 5px;
+        text-align: center;
+        color: #000000;
+    }
+    QProgressBar::chunk { background-color: #3465A4; border-radius: 5px; }
+    QLabel { color: #000000; }
+    QStatusBar { background-color: #F0F0F0; color: #000000; }
+    QSplitter::handle { background-color: #F0F0F0; }
+"""
 
 class ThumbnailLoader(QRunnable):
     def __init__(self, image_path, thumb_path, callback, failed_images):
@@ -26,15 +99,7 @@ class ThumbnailLoader(QRunnable):
     def run(self):
         try:
             logger.debug('Generating thumbnail for %s', self.image_path)
-            if not os.path.exists(self.image_path):
-                self.failed_images.add(self.image_path)
-                self.callback(self.image_path, None)
-                return
-            if not os.access(self.image_path, os.R_OK):
-                self.failed_images.add(self.image_path)
-                self.callback(self.image_path, None)
-                return
-            if os.stat(self.image_path).st_size == 0:
+            if not os.path.exists(self.image_path) or not os.access(self.image_path, os.R_OK) or os.stat(self.image_path).st_size == 0:
                 self.failed_images.add(self.image_path)
                 self.callback(self.image_path, None)
                 return
@@ -67,6 +132,7 @@ class MainWindow(QMainWindow):
         os.makedirs(self.thumbnail_dir, exist_ok=True)
         self.threadpool = QThreadPool()
         self.threadpool.setMaxThreadCount(2)
+
         # Connect signals
         self.controller.folder_scanned.connect(self.show_thumbnails)
         self.controller.faces_ready.connect(self.display_faces_in_image)
@@ -76,21 +142,49 @@ class MainWindow(QMainWindow):
         logger.info('GUI initialized')
         self.load_settings()
 
+        # At startup, default to dark theme
+        self.apply_dark_theme()
+
     def init_ui(self):
         self.setWindowTitle('SnapSort')
         self.setGeometry(100, 100, 1000, 700)
-        main_split = QSplitter(Qt.Horizontal)
+
+        # Global font
+        font = QFont('Segoe UI', 10)
+        self.setFont(font)
 
         # Menu bar
         menubar = self.menuBar()
+        # Model option
         opt_menu = menubar.addMenu('Options')
-        self.model_action = QAction('Use CNN model', self, checkable=True)
+        self.model_action = QAction('Use CNN model', self)
+        self.model_action.setCheckable(True)
         self.model_action.triggered.connect(self.toggle_model)
         opt_menu.addAction(self.model_action)
+
+        # Theme menu
+        theme_menu = menubar.addMenu('Theme')
+        self.action_dark = QAction('Dark Mode', self, checkable=True)
+        self.action_light = QAction('Light Mode', self, checkable=True)
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        for act in (self.action_dark, self.action_light):
+            group.addAction(act)
+            theme_menu.addAction(act)
+        self.action_dark.triggered.connect(self.apply_dark_theme)
+        self.action_light.triggered.connect(self.apply_light_theme)
+        self.action_dark.setChecked(True)
+
+        # Main splitter
+        main_split = QSplitter(Qt.Horizontal)
+        main_split.setHandleWidth(5)
 
         # Left pane: folder selector + gallery
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(10)
+
         self.btn_select = QPushButton('Select Folder')
         self.btn_select.clicked.connect(self.select_folder)
         left_layout.addWidget(self.btn_select)
@@ -113,18 +207,20 @@ class MainWindow(QMainWindow):
 
         # Right pane: image viewer + face list + matching images
         right_split = QSplitter(Qt.Vertical)
+        right_split.setHandleWidth(5)
+        right_split.setContentsMargins(10, 10, 10, 10)
+
         self.viewer_label = QLabel('Select an image')
         self.viewer_label.setAlignment(Qt.AlignCenter)
+        self.viewer_label.setStyleSheet('border: 1px solid;')  # border color follows theme
         right_split.addWidget(self.viewer_label)
 
-        # Face thumbnails
         self.face_list = QListWidget()
         self.face_list.setViewMode(QListWidget.IconMode)
         self.face_list.setIconSize(QSize(80, 80))
         self.face_list.itemClicked.connect(self.on_face_clicked)
         right_split.addWidget(self.face_list)
 
-        # Matching images containing all faces
         self.matching_list = QListWidget()
         self.matching_list.setViewMode(QListWidget.IconMode)
         self.matching_list.setIconSize(QSize(100, 100))
@@ -140,6 +236,44 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.progress)
         self.gallery_list.verticalScrollBar().valueChanged.connect(self._load_visible_thumbnails)
         QTimer.singleShot(100, self._load_visible_thumbnails)
+
+    def apply_light_theme(self):
+        app = QApplication.instance()
+        app.setStyle('Fusion')
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor('#F0F0F0'))
+        palette.setColor(QPalette.WindowText, Qt.black)
+        palette.setColor(QPalette.Base, QColor('#FFFFFF'))
+        palette.setColor(QPalette.AlternateBase, QColor('#F0F0F0'))
+        palette.setColor(QPalette.ToolTipBase, Qt.black)
+        palette.setColor(QPalette.ToolTipText, Qt.black)
+        palette.setColor(QPalette.Text, Qt.black)
+        palette.setColor(QPalette.Button, QColor('#FFFFFF'))
+        palette.setColor(QPalette.ButtonText, Qt.black)
+        palette.setColor(QPalette.Highlight, QColor('#3465A4'))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        app.setPalette(palette)
+        app.setStyleSheet(LIGHT_STYLESHEET)
+        self.action_light.setChecked(True)
+
+    def apply_dark_theme(self):
+        app = QApplication.instance()
+        app.setStyle('Fusion')
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(45, 45, 45))
+        palette.setColor(QPalette.WindowText, Qt.white)
+        palette.setColor(QPalette.Base, QColor(38, 38, 38))
+        palette.setColor(QPalette.AlternateBase, QColor(45, 45, 45))
+        palette.setColor(QPalette.ToolTipBase, Qt.white)
+        palette.setColor(QPalette.ToolTipText, Qt.white)
+        palette.setColor(QPalette.Text, Qt.white)
+        palette.setColor(QPalette.Button, QColor(60, 60, 60))
+        palette.setColor(QPalette.ButtonText, Qt.white)
+        palette.setColor(QPalette.Highlight, QColor(100, 100, 250))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        app.setPalette(palette)
+        app.setStyleSheet(DARK_STYLESHEET)
+        self.action_dark.setChecked(True)
 
     def load_settings(self):
         try:
@@ -160,7 +294,8 @@ class MainWindow(QMainWindow):
 
     def open_context_menu(self, pos: QPoint):
         item = self.gallery_list.itemAt(pos)
-        if not item: return
+        if not item:
+            return
         path = item.data(Qt.UserRole)
         menu = QMenu()
         rot = menu.addAction('Rotate 90°')
@@ -171,7 +306,6 @@ class MainWindow(QMainWindow):
                 img = Image.open(path)
                 img = img.rotate(90, expand=True)
                 img.save(path)
-                # remove thumbnail to force regen
                 thumb = self.get_thumbnail_path(path)
                 if os.path.exists(thumb): os.remove(thumb)
                 self._load_visible_thumbnails()
@@ -200,12 +334,7 @@ class MainWindow(QMainWindow):
         self.btn_back.hide()
 
         for path in image_paths:
-            if not os.path.exists(path):
-                logger.warning('Image does not exist: %s', path)
-                self.failed_images.add(path)
-                continue
-            if not os.access(path, os.R_OK):
-                logger.warning('No read permission for %s', path)
+            if not os.path.exists(path) or not os.access(path, os.R_OK):
                 self.failed_images.add(path)
                 continue
             item = QListWidgetItem()
@@ -214,7 +343,6 @@ class MainWindow(QMainWindow):
             self.gallery_list.addItem(item)
         logger.debug('Added %d items to gallery_list', self.gallery_list.count())
 
-        # Schedule thumbnail loading and repaint
         QTimer.singleShot(0, self._load_visible_thumbnails)
         QTimer.singleShot(50, self.gallery_list.repaint)
 
@@ -326,19 +454,13 @@ class MainWindow(QMainWindow):
         self.in_filtered_view = True
         self.btn_back.show()
         for path in paths:
-            if not os.path.exists(path):
-                logger.warning('Image does not exist: %s', path)
-                self.failed_images.add(path)
-                continue
-            if not os.access(path, os.R_OK):
-                logger.warning('No read permission for %s', path)
+            if not os.path.exists(path) or not os.access(path, os.R_OK):
                 self.failed_images.add(path)
                 continue
             item = QListWidgetItem()
             item.setData(Qt.UserRole, path)
             item.setIcon(QIcon('placeholder.png'))
             self.gallery_list.addItem(item)
-            logger.debug('Added item for %s', path)
         logger.debug('Added %d items to gallery_list for face %s', self.gallery_list.count(), face_id)
         QTimer.singleShot(0, self._load_visible_thumbnails)
         QTimer.singleShot(50, self.gallery_list.repaint)
