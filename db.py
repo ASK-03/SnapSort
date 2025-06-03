@@ -124,15 +124,17 @@ class Database:
             return []
 
         placeholders = ",".join("?" for _ in face_ids)
-        query = (
-            "SELECT images.path "
-            "FROM occurrences "
-            "JOIN images ON occurrences.image_id = images.id "
-            f"WHERE face_id IN ({placeholders}) "
-            "GROUP BY images.id "
-            "HAVING COUNT(DISTINCT face_id) = ?"
-        )
-        params = face_ids + [len(face_ids)]
+
+        query = f"""
+            SELECT images.path
+            FROM occurrences
+            JOIN images ON occurrences.image_id = images.id
+            WHERE face_id IN ({placeholders})
+            GROUP BY images.id
+            HAVING COUNT(DISTINCT face_id) > 1
+        """
+
+        params = face_ids
 
         with self.lock:
             c = self.conn.cursor()
