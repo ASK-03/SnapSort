@@ -4,6 +4,16 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ---
 
+## 🔁 Version 2.0.0 Plan
+
+### 🧠 Core Functionality
+
+- [x] **Adding Human Feedback Loop to club same faces that are recognized as different**  
+       A complete different window which contains all the faces and human can select the faces that are same.
+
+
+---
+
 ## 🔁 Version 1.0.0 Plan
 
 ### 🧠 Core Functionality
@@ -20,16 +30,6 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ---
 
----
-
-## 🔁 Version 2.0.0 Plan
-
-### 🧠 Core Functionality
-
-- [ ] **Adding Human Feedback Loop to club same faces that are recognized as different**  
-       A complete different window which contains all the faces and human can select the faces that are same.
-
----
 
 ## 🔴 High Priority
 
