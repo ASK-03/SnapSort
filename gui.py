@@ -198,6 +198,9 @@ class MainWindow(QMainWindow):
         self.gallery_list.setViewMode(QListWidget.IconMode)
         self.gallery_list.setIconSize(QSize(100, 100))
         self.gallery_list.setResizeMode(QListWidget.Adjust)
+        self.gallery_list.setFlow(QListWidget.LeftToRight)  # force flow
+        self.gallery_list.setWrapping(True)  # enable wrapping immediately
+        self.gallery_list.setGridSize(QSize(110, 110))  # ensure uniform grid spacing
         self.gallery_list.itemClicked.connect(self.on_image_clicked)
         self.gallery_list.setMinimumWidth(550)
         self.gallery_list.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -218,12 +221,17 @@ class MainWindow(QMainWindow):
         self.face_list = QListWidget()
         self.face_list.setViewMode(QListWidget.IconMode)
         self.face_list.setIconSize(QSize(80, 80))
+        self.face_list.setFlow(QListWidget.LeftToRight)
+        self.face_list.setWrapping(True)
+        self.face_list.setGridSize(QSize(90, 90))
         self.face_list.itemClicked.connect(self.on_face_clicked)
         right_split.addWidget(self.face_list)
 
         self.matching_list = QListWidget()
         self.matching_list.setViewMode(QListWidget.IconMode)
         self.matching_list.setIconSize(QSize(100, 100))
+        self.matching_list.setWrapping(True)
+        self.matching_list.setGridSize(QSize(110, 110))
         self.matching_list.setMinimumHeight(150)
         self.matching_list.itemClicked.connect(self.on_image_clicked)
         right_split.addWidget(self.matching_list)
@@ -232,8 +240,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(main_split)
 
         # Status & progress
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
         self.progress = QProgressBar()
-        self.statusBar().addPermanentWidget(self.progress)
+        self.statusBar.addPermanentWidget(self.progress)
         self.gallery_list.verticalScrollBar().valueChanged.connect(self._load_visible_thumbnails)
         QTimer.singleShot(100, self._load_visible_thumbnails)
 

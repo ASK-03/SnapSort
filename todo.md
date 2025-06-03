@@ -60,7 +60,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
   - Detect and adjust for rotated or flipped faces during processing.
 
-- [ ] **Fix grid layout bug on image load**
+- [x] **Fix grid layout bug on image load**
 
   - Images currently render in a single column until the window is resized.
   - Manually trigger layout/UI updates after thumbnails are inserted.
@@ -74,7 +74,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ### 🎨 GUI / UX Improvements
 
-- [ ] **Improve overall GUI layout**
+- [x] **Improve overall GUI layout**
 
   - Consistent spacing, padding, and transitions.
   - Polished visual hierarchy for thumbnail views, detail panels, and navigation.
