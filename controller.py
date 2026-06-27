@@ -4,6 +4,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from collections import deque
 from multiprocessing import Pool
 import db, indexer, worker
+from clip_index import CLIPIndex
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,10 @@ class Controller(QObject):
         self.num_workers = num_workers
         logger.info("Initializing Controller with %d workers", self.num_workers)
 
-        # Initialize database, Faiss index, and worker pool
-        self.db = db.Database("faces.db")
-        self.idx = indexer.FaissIndex("faces.index")
+        # Initialize database, Faiss index, CLIP index, and worker pool
+        self.db         = db.Database("faces.db")
+        self.idx        = indexer.FaissIndex("faces.index")
+        self.clip_index = CLIPIndex("clip.index")
         self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
         self.image_to_faces = {}
         
@@ -112,14 +114,23 @@ class Controller(QObject):
             self.db.insert_occurrences_batch(items)
 
         self.image_to_faces[img_path] = face_ids
-        logger.debug("Indexed %s: %s", img_path, face_ids)
+        logger.debug("Indexed %s: faces=%s", img_path, face_ids)
+
+        # Store CLIP embedding keyed by DB image_id
+        clip_emb = result.get("clip_emb")
+        if clip_emb is not None:
+            img_id = self.db.get_image_id(img_path)
+            if img_id is not None:
+                self.clip_index.add(img_id, clip_emb)
+                self.db.mark_clip_indexed(img_id)
 
         self._save_counter += 1
         if self._save_counter % 50 == 0:
             try:
                 self.idx.save()
+                self.clip_index.save()
             except Exception as e:
-                logger.error("Error saving Faiss index: %s", e)
+                logger.error("Error saving indexes: %s", e)
 
         # Schedule next chunk of images (if any)
         self._submit_next_images()

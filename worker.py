@@ -1,14 +1,19 @@
 import logging
 from face_processing import init_face_model, detect_and_embed
+from clip_processor import CLIPProcessor
 from PIL import Image, ImageOps
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
+_clip: CLIPProcessor | None = None
+
 
 def _worker_init():
-    """Called once per worker process at pool creation — loads YuNet + SFace."""
+    """Called once per worker process at pool creation — loads YuNet + SFace + CLIP."""
+    global _clip
     init_face_model()
+    _clip = CLIPProcessor()   # sessions are lazy-loaded on first embed call
 
 
 def process_image(path):
@@ -49,8 +54,17 @@ def process_image(path):
             )
             embs_and_boxes.append((emb, orig_box))
 
-        return {"image": path, "embeddings": embs_and_boxes}
+        # CLIP semantic embedding (uses original-resolution image path)
+        clip_emb = None
+        if _clip is not None:
+            try:
+                clip_emb = _clip.embed_image(path)
+            except Exception as ce:
+                logger.warning("CLIP embed failed for %s: %s", path, ce)
+
+        return {"image": path, "embeddings": embs_and_boxes, "clip_emb": clip_emb}
 
     except Exception as e:
         logger.error("Error processing %s: %s", path, e)
-        return {"image": path, "embeddings": []}
+        return {"image": path, "embeddings": [], "clip_emb": None}
+

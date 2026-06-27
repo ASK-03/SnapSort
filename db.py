@@ -28,7 +28,8 @@ class Database:
             c.execute(
                 "CREATE TABLE IF NOT EXISTS faces ("
                 "  id INTEGER PRIMARY KEY, "
-                "  last_seen REAL)"
+                "  last_seen REAL, "
+                "  name TEXT DEFAULT NULL)"
             )
             c.execute(
                 "CREATE TABLE IF NOT EXISTS occurrences ("
@@ -36,8 +37,20 @@ class Database:
                 "  face_id INTEGER, "
                 "  x1 INTEGER, y1 INTEGER, x2 INTEGER, y2 INTEGER)"
             )
-            c.execute("CREATE INDEX IF NOT EXISTS idx_occ_face ON occurrences(image_id, face_id)")
+            # Tracks which images have a CLIP embedding in the FAISS index
+            c.execute(
+                "CREATE TABLE IF NOT EXISTS clip_status ("
+                "  image_id INTEGER PRIMARY KEY, "
+                "  indexed INTEGER DEFAULT 0, "
+                "  FOREIGN KEY (image_id) REFERENCES images(id))"
+            )
+            c.execute("CREATE INDEX IF NOT EXISTS idx_occ_face  ON occurrences(image_id, face_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_occ_image ON occurrences(face_id, image_id)")
+            # Migrate: add name column if it doesn't exist yet
+            try:
+                c.execute("ALTER TABLE faces ADD COLUMN name TEXT DEFAULT NULL")
+            except Exception:
+                pass  # column already exists
             self.conn.commit()
 
     def insert_occurrence(self, image_path, face_id, box):
@@ -111,6 +124,68 @@ class Database:
                     (img_id, face_id, x1, y1, x2, y2),
                 )
             self.conn.commit()  # ONE commit for entire batch
+
+    # ------------------------------------------------------------------
+    # Image ID helpers (needed by CLIPIndex)
+    # ------------------------------------------------------------------
+
+    def get_image_id(self, image_path: str) -> int | None:
+        """Return the SQLite id for an image path, or None if not found."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT id FROM images WHERE path = ?", (image_path,))
+            row = c.fetchone()
+            return row[0] if row else None
+
+    def get_image_path(self, image_id: int) -> str | None:
+        """Return the path for an image id, or None if not found."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT path FROM images WHERE id = ?", (image_id,))
+            row = c.fetchone()
+            return row[0] if row else None
+
+    def get_face_ids_for_image_id(self, image_id: int) -> list[int]:
+        """Return all face_ids in an image by numeric image_id."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT DISTINCT face_id FROM occurrences WHERE image_id = ?", (image_id,))
+            return [r[0] for r in c.fetchall()]
+
+    def mark_clip_indexed(self, image_id: int):
+        """Record that image_id has been added to the CLIP FAISS index."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(
+                "INSERT OR REPLACE INTO clip_status(image_id, indexed) VALUES(?, 1)",
+                (image_id,),
+            )
+            self.conn.commit()
+
+    # ------------------------------------------------------------------
+    # Face naming (for search reranking)
+    # ------------------------------------------------------------------
+
+    def set_face_name(self, face_id: int, name: str | None):
+        """Assign or clear a human-readable name for a face cluster."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("UPDATE faces SET name = ? WHERE id = ?", (name, face_id))
+            self.conn.commit()
+
+    def get_face_name(self, face_id: int) -> str | None:
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT name FROM faces WHERE id = ?", (face_id,))
+            row = c.fetchone()
+            return row[0] if row else None
+
+    def get_all_named_faces(self) -> list[tuple[int, str]]:
+        """Return [(face_id, name), ...] for all faces that have a name."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT id, name FROM faces WHERE name IS NOT NULL AND name != ''")
+            return c.fetchall()
 
     def get_faces_in_image(self, image_path):
         """
