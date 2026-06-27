@@ -180,4 +180,4 @@ if __name__ == "__main__":
         port_idx = sys.argv.index("--port")
         if port_idx + 1 < len(sys.argv):
             port = int(sys.argv[port_idx + 1])
-    uvicorn.run("api:app", host="127.0.0.1", port=port, reload=False)
+    uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
