@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QPushButton,
     QFileDialog,
     QLabel,
@@ -17,6 +18,7 @@ from PyQt5.QtWidgets import (
     QActionGroup,
     QStatusBar,
     QApplication,
+    QLineEdit,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThreadPool, QRunnable, QPoint
 from PyQt5.QtGui import QPixmap, QIcon, QPalette, QColor, QFont
@@ -167,6 +169,7 @@ class MainWindow(QMainWindow):
             self.display_images_with_all_faces
         )
         self.controller.face_images_ready.connect(self.show_images_for_face)
+        self.controller.search_results.connect(self.show_search_results)
 
         self.init_ui()
         logger.info("GUI initialized")
@@ -222,6 +225,17 @@ class MainWindow(QMainWindow):
         self.btn_select = QPushButton("Select Folder")
         self.btn_select.clicked.connect(self.select_folder)
         left_layout.addWidget(self.btn_select)
+
+        # Search bar
+        search_row = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search images… (e.g. 'Rahul hiking')")
+        self.search_input.returnPressed.connect(self._on_search)
+        self.btn_search = QPushButton("Search")
+        self.btn_search.clicked.connect(self._on_search)
+        search_row.addWidget(self.search_input)
+        search_row.addWidget(self.btn_search)
+        left_layout.addLayout(search_row)
 
         self.btn_back = QPushButton("Back to All Images")
         self.btn_back.clicked.connect(self.back_to_gallery)
@@ -555,3 +569,40 @@ class MainWindow(QMainWindow):
         """
         self.gallery_list.clear()
         self.failed_images.clear()
+
+    # ------------------------------------------------------------------
+    # Search
+    # ------------------------------------------------------------------
+
+    def _on_search(self):
+        query = self.search_input.text().strip()
+        if not query:
+            return
+        self.statusBar.showMessage(f"Searching: {query}…")
+        self.controller.search(query)
+
+    def show_search_results(self, results: list):
+        """
+        Received from controller.search_results: [(image_path, score), ...].
+        Display results in the gallery with a 'Back' button.
+        """
+        self.clear_gallery()
+        self.in_filtered_view = True
+        self.btn_back.show()
+
+        if not results:
+            self.statusBar.showMessage("No results found.")
+            return
+
+        self.statusBar.showMessage(f"{len(results)} results found.")
+        for path, _score in results:
+            if not os.path.exists(path) or not os.access(path, os.R_OK):
+                self.failed_images.add(path)
+                continue
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, path)
+            item.setIcon(QIcon("placeholder.png"))
+            self.gallery_list.addItem(item)
+
+        QTimer.singleShot(0, self._load_visible_thumbnails)
+        QTimer.singleShot(50, self.gallery_list.repaint)

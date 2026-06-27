@@ -5,6 +5,8 @@ from collections import deque
 from multiprocessing import Pool
 import db, indexer, worker
 from clip_index import CLIPIndex
+from clip_processor import CLIPProcessor
+from search_engine import SearchEngine
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +17,7 @@ class Controller(QObject):
     face_images_ready = pyqtSignal(int, list)  # Emits (face_id, [paths])
     images_with_all_faces_ready = pyqtSignal(list)  # Emits [image_paths]
     image_processed = pyqtSignal(dict)  # Emits processed result dict
+    search_results = pyqtSignal(list)  # Emits [(image_path, score), ...]
 
     def __init__(self, num_workers=4):
         super().__init__()
@@ -27,6 +30,10 @@ class Controller(QObject):
         self.clip_index = CLIPIndex("clip.index")
         self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
         self.image_to_faces = {}
+
+        # Search engine (uses main-process CLIP processor for query encoding)
+        self._clip_proc   = CLIPProcessor()
+        self.search_engine = SearchEngine(self.db, self.clip_index, self._clip_proc)
         
         # Connect the signal to ensure thread-safe processing on the main thread
         self.image_processed.connect(self._process_result)
@@ -178,3 +185,13 @@ class Controller(QObject):
 
         # **Do NOT rebuild the Faiss index here**. We assume it's acceptable to keep
         # stale Faiss entries pointing to old vector IDs. Only the DB has changed.
+
+    def search(self, query: str):
+        """
+        Run semantic search + face-name reranking.
+        Emits search_results([(image_path, score), ...]).
+        """
+        if not query.strip():
+            return
+        results = self.search_engine.search(query, top_k=20)
+        self.search_results.emit(results)
