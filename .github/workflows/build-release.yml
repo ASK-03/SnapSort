@@ -45,9 +45,13 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libarchive-tools
 
-      - name: Build Electron App
+      - name: Download Machine Learning Models
         run: |
           mkdir -p models
+          python scripts/download_models.py
+
+      - name: Build Electron App
+        run: |
           cd desktop
           npm run build
         env:

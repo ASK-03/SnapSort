@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawn, exec, ChildProcess } from 'child_process'
 import net from 'net'
+import * as fs from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -45,6 +46,16 @@ function startPythonBackend(port: number) {
     // In production, execute the compiled PyInstaller binary
     const binaryName = isWin ? 'api.exe' : 'api';
     pythonExecutable = path.join(process.resourcesPath, 'backend', binaryName);
+    
+    // Ensure the binary is executable on Unix systems
+    if (!isWin) {
+      try {
+        fs.chmodSync(pythonExecutable, '755');
+      } catch (e) {
+        console.error('Failed to set executable permissions on backend binary', e);
+      }
+    }
+    
     args = ['--port', port.toString()];
     cwd = process.resourcesPath;
   } else {

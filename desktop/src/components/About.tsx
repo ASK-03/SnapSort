@@ -10,7 +10,7 @@ export const About = () => {
     <div className="flex-1 flex flex-col bg-slate-50 dark:bg-[#0f1115] h-full overflow-y-auto p-8 items-center justify-center">
       <div className="max-w-md w-full text-center">
         <div className="w-24 h-24 bg-white dark:bg-[#1a1d24] rounded-2xl mx-auto mb-6 shadow-xl shadow-blue-500/20 flex items-center justify-center p-2 border border-slate-200 dark:border-slate-800">
-          <img src="/snapsort-logo.png" alt="SnapSort Logo" className="w-full h-full object-contain rounded-xl" />
+          <img src="./snapsort-logo.png" alt="SnapSort Logo" className="w-full h-full object-contain rounded-xl" />
         </div>
         <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">SnapSort</h2>
         <p className="text-slate-500 dark:text-slate-400 mb-8">Version 3.0.0 (Offline-First Privacy Edition)</p>

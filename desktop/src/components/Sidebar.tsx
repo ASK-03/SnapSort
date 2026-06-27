@@ -38,7 +38,7 @@ export const Sidebar = () => {
     <aside className="w-64 bg-slate-50 dark:bg-[#0f1115] border-r border-slate-200 dark:border-slate-800 flex flex-col h-full text-sm">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3">
-        <img src="/snapsort-logo.png" alt="SnapSort Logo" className="w-8 h-8 rounded-lg" />
+        <img src="./snapsort-logo.png" alt="SnapSort Logo" className="w-8 h-8 rounded-lg" />
         <h1 className="text-xl font-semibold text-slate-900 dark:text-white">SnapSort</h1>
       </div>
 
