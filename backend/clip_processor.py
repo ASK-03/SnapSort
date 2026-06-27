@@ -16,7 +16,17 @@ logger = logging.getLogger(__name__)
 
 _CLIP_MEAN = np.array([0.48145466, 0.4578275,  0.40821073], dtype=np.float32)
 _CLIP_STD  = np.array([0.26862954, 0.26130258, 0.27577711], dtype=np.float32)
-_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+
+# Resolve models dir: env var (from api.py) > PyInstaller temp dir > relative to source
+import sys
+def _resolve_models_dir():
+    env = os.environ.get("SNAPSORT_MODELS_DIR")
+    if env and os.path.isdir(env):
+        return env
+    base = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+    return os.path.abspath(os.path.join(base, "..", "models"))
+
+_MODELS_DIR = _resolve_models_dir()
 
 
 def _make_session(filename: str) -> ort.InferenceSession:

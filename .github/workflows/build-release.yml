@@ -62,11 +62,12 @@ jobs:
         if: success()
         with:
           files: |
-            desktop/release/*.exe
-            desktop/release/*.dmg
-            desktop/release/*.deb
-            desktop/release/*.AppImage
-            desktop/release/*.pacman
+            desktop/release/**/*.exe
+            desktop/release/**/*.dmg
+            desktop/release/**/*.deb
+            desktop/release/**/*.AppImage
+            desktop/release/**/*.pacman
+            desktop/release/**/*.zip
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

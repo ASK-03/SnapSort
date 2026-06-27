@@ -3,9 +3,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
+import sys
 import uvicorn
 
 from controller import Controller
+
+# ---------------------------------------------------------------------------
+# Resolve runtime directories (passed by Electron or defaulting for dev)
+# ---------------------------------------------------------------------------
+def _parse_cli_arg(name: str, default: str) -> str:
+    """Read --name VALUE from sys.argv, falling back to *default*."""
+    if name in sys.argv:
+        idx = sys.argv.index(name)
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1]
+    return default
+
+# Where the backend stores its database & indexes (must be writable)
+DATA_DIR   = _parse_cli_arg("--data-dir",   os.path.join(os.path.dirname(__file__), "..", "data"))
+# Where ONNX model files live
+MODELS_DIR = _parse_cli_arg("--models-dir", os.path.join(os.path.dirname(__file__), "..", "models"))
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Expose to other modules that import them at module level
+os.environ["SNAPSORT_DATA_DIR"]   = os.path.abspath(DATA_DIR)
+os.environ["SNAPSORT_MODELS_DIR"] = os.path.abspath(MODELS_DIR)
 
 app = FastAPI(title="SnapSort API")
 
@@ -19,7 +42,7 @@ app.add_middleware(
 )
 
 # Global controller instance
-controller = Controller(num_workers=4)
+controller = Controller(num_workers=4, data_dir=os.path.abspath(DATA_DIR))
 
 class ScanRequest(BaseModel):
     folder_path: str
@@ -147,7 +170,6 @@ async def serve_thumbnail(face_id: int):
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     return FileResponse(path)
 
-import sys
 if __name__ == "__main__":
     port = 8000
     if "--port" in sys.argv:

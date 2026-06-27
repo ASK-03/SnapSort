@@ -56,7 +56,12 @@ function startPythonBackend(port: number) {
       }
     }
     
-    args = ['--port', port.toString()];
+    // User-writable data directory for DB + indexes
+    const dataDir = path.join(app.getPath('userData'), 'data');
+    // Models are bundled inside the app resources
+    const modelsDir = path.join(process.resourcesPath, 'models');
+    
+    args = ['--port', port.toString(), '--data-dir', dataDir, '--models-dir', modelsDir];
     cwd = process.resourcesPath;
   } else {
     // In development, run the python script using the system interpreter

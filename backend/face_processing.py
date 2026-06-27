@@ -17,8 +17,17 @@ logger = logging.getLogger(__name__)
 _detector   = None   # cv2.FaceDetectorYN
 _recognizer = None   # cv2.FaceRecognizerSF
 
-# Resolve models dir relative to this file so it works both in-place and packaged
-_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
+# Resolve models dir: env var (from api.py) > PyInstaller temp dir > relative to source
+import sys
+def _resolve_models_dir():
+    env = os.environ.get("SNAPSORT_MODELS_DIR")
+    if env and os.path.isdir(env):
+        return env
+    # PyInstaller --onefile extracts to sys._MEIPASS
+    base = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+    return os.path.abspath(os.path.join(base, "..", "models"))
+
+_MODELS_DIR = _resolve_models_dir()
 
 
 def _model_path(filename):

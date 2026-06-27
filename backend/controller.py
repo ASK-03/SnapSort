@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class Controller:
-    def __init__(self, num_workers=4):
+    def __init__(self, num_workers=4, data_dir="data"):
         self.num_workers = num_workers
-        logger.info("Initializing Controller with %d workers", self.num_workers)
+        self.data_dir = data_dir
+        os.makedirs(self.data_dir, exist_ok=True)
+        logger.info("Initializing Controller with %d workers, data_dir=%s", self.num_workers, self.data_dir)
 
         # Progress tracking
         self.total_images = 0
@@ -22,9 +24,9 @@ class Controller:
         self.is_scanning = False
 
         # Initialize database, Faiss index, CLIP index, and worker pool
-        self.db         = db.Database("data/faces.db")
-        self.idx        = indexer.FaissIndex("data/faces.index")
-        self.clip_index = CLIPIndex("data/clip.index")
+        self.db         = db.Database(os.path.join(self.data_dir, "faces.db"))
+        self.idx        = indexer.FaissIndex(os.path.join(self.data_dir, "faces.index"))
+        self.clip_index = CLIPIndex(os.path.join(self.data_dir, "clip.index"))
         self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
         self.image_to_faces = {}
 

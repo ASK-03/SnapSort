@@ -20,25 +20,31 @@
   "build": {
     "appId": "com.snapsort.app",
     "productName": "SnapSort",
+    "asar": false,
     "directories": {
       "output": "release"
     },
+    "icon": "build/icon.png",
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "icon": "build/icon.icns"
     },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "linux": {
       "target": [
         "AppImage",
         "deb",
         "pacman"
-      ]
+      ],
+      "icon": "build/icon.png",
+      "category": "Graphics"
     },
     "extraResources": [
       {
