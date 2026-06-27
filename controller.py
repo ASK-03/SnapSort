@@ -22,7 +22,7 @@ class Controller(QObject):
         # Initialize database, Faiss index, and worker pool
         self.db = db.Database("faces.db")
         self.idx = indexer.FaissIndex("faces.index")
-        self.pool = Pool(processes=self.num_workers)
+        self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
         self.image_to_faces = {}
 
         # Throttling variables

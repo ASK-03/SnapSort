@@ -6,6 +6,11 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def _worker_init():
+    """Called once per worker process at pool creation."""
+    import face_recognition  # loads dlib model once
+
+
 def process_image(path):
     """
     Worker function to open 'path', detect faces, compute embeddings, and return:
