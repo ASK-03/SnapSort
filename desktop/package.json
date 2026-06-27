@@ -1,7 +1,8 @@
 {
-  "name": "desktop",
+  "name": "snapsort",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.0.0",
+  "description": "AI-powered local photo manager",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {

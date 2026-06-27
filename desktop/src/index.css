@@ -7,3 +7,19 @@
     @apply bg-slate-900 text-slate-100 antialiased;
   }
 }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0f1115;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}

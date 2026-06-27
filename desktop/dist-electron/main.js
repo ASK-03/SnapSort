@@ -1,41 +1,91 @@
-import { BrowserWindow as e, app as t, dialog as n, ipcMain as r } from "electron";
-import i from "path";
-import { fileURLToPath as a } from "url";
-import { spawn as o } from "child_process";
+import { BrowserWindow, app, dialog, ipcMain } from "electron";
+import path from "path";
+import { fileURLToPath } from "url";
+import { spawn } from "child_process";
+import net from "net";
 //#region electron/main.ts
-var s = i.dirname(a(import.meta.url)), c, l = null, u = process.env.VITE_DEV_SERVER_URL;
-function d() {
-	let e = i.join(s, "../../env/bin/python3"), t = i.join(s, "../../api.py");
-	console.log("Starting Python backend..."), console.log(`Executable: ${e}`), console.log(`Script: ${t}`), l = o(e, [t], {
-		cwd: i.join(s, "../../"),
-		stdio: "pipe"
-	}), l.stdout?.on("data", (e) => {
-		console.log(`[Python] ${e.toString()}`);
-	}), l.stderr?.on("data", (e) => {
-		console.error(`[Python] ${e.toString()}`);
-	}), l.on("close", (e) => {
-		console.log(`Python process exited with code ${e}`), l = null;
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+var mainWindow;
+var pythonProcess = null;
+var backendPort = 8e3;
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+function getFreePort() {
+	return new Promise((resolve, reject) => {
+		const srv = net.createServer();
+		srv.listen(0, "127.0.0.1", () => {
+			const port = srv.address().port;
+			srv.close((err) => {
+				if (err) reject(err);
+				else resolve(port);
+			});
+		});
+		srv.on("error", reject);
 	});
 }
-function f() {
-	l &&= (console.log("Killing Python backend..."), l.kill("SIGINT"), null);
+function startPythonBackend(port) {
+	const pythonExecutable = path.join(__dirname, "../../env/bin/python3");
+	const apiScript = path.join(__dirname, "../../backend/api.py");
+	console.log(`Starting Python backend on port ${port}...`);
+	console.log(`Executable: ${pythonExecutable}`);
+	console.log(`Script: ${apiScript}`);
+	pythonProcess = spawn(pythonExecutable, [
+		apiScript,
+		"--port",
+		port.toString()
+	], {
+		cwd: path.join(__dirname, "../../"),
+		stdio: "pipe"
+	});
+	pythonProcess.stdout?.on("data", (data) => {
+		console.log(`[Python] ${data.toString()}`);
+	});
+	pythonProcess.stderr?.on("data", (data) => {
+		console.error(`[Python] ${data.toString()}`);
+	});
+	pythonProcess.on("close", (code) => {
+		console.log(`Python process exited with code ${code}`);
+		pythonProcess = null;
+	});
 }
-function p() {
-	c = new e({
+function stopPythonBackend() {
+	if (pythonProcess) {
+		console.log("Killing Python backend...");
+		pythonProcess.kill("SIGINT");
+		pythonProcess = null;
+	}
+}
+function createWindow() {
+	mainWindow = new BrowserWindow({
 		width: 1200,
 		height: 800,
-		webPreferences: { preload: i.join(s, "preload.js") }
-	}), u ? c.loadURL(u) : c.loadFile(i.join(s, "../dist/index.html"));
+		webPreferences: { preload: path.join(__dirname, "preload.mjs") }
+	});
+	if (VITE_DEV_SERVER_URL) mainWindow.loadURL(VITE_DEV_SERVER_URL);
+	else mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
 }
-t.on("window-all-closed", () => {
-	process.platform !== "darwin" && (t.quit(), c = null);
-}), t.on("will-quit", () => {
-	f();
-}), t.whenReady().then(() => {
-	d(), setTimeout(p, 1e3), r.handle("dialog:openDirectory", async () => {
-		if (!c) return null;
-		let { canceled: e, filePaths: t } = await n.showOpenDialog(c, { properties: ["openDirectory"] });
-		return e ? null : t[0];
+app.on("window-all-closed", () => {
+	if (process.platform !== "darwin") {
+		app.quit();
+		mainWindow = null;
+	}
+});
+app.on("will-quit", () => {
+	stopPythonBackend();
+});
+app.whenReady().then(async () => {
+	try {
+		backendPort = await getFreePort();
+	} catch (e) {
+		console.warn("Failed to get free port, using default 8000", e);
+	}
+	startPythonBackend(backendPort);
+	ipcMain.handle("getBackendPort", () => backendPort);
+	setTimeout(createWindow, 1e3);
+	ipcMain.handle("dialog:openDirectory", async () => {
+		if (!mainWindow) return null;
+		const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { properties: ["openDirectory"] });
+		if (canceled) return null;
+		else return filePaths[0];
 	});
 });
 //#endregion

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 
-type ViewMode = 'photos' | 'faces' | 'people' | 'settings';
+type ViewMode = 'photos' | 'faces' | 'people' | 'settings' | 'about';
 
 interface AppState {
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
   images: string[];
   setImages: (images: string[]) => void;
   searchQuery: string;
@@ -14,6 +16,8 @@ interface AppState {
   
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
+  lightboxImage: string | null;
+  setLightboxImage: (image: string | null) => void;
   
   selectedImage: string | null;
   setSelectedImage: (image: string | null) => void;
@@ -21,14 +25,14 @@ interface AppState {
   showRightSidebar: boolean;
   setShowRightSidebar: (show: boolean) => void;
 
-  theme: 'dark' | 'light';
-  setTheme: (theme: 'dark' | 'light') => void;
-  
+
   stats: { photos: number; faces: number; people: number };
   setStats: (stats: { photos: number; faces: number; people: number }) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
+  theme: 'dark',
+  setTheme: (theme) => set({ theme }),
   images: [],
   setImages: (images) => set({ images }),
   searchQuery: '',
@@ -39,6 +43,8 @@ export const useAppStore = create<AppState>((set) => ({
   setProgress: (progress) => set({ progress }),
   
   viewMode: 'photos',
+  lightboxImage: null,
+  setLightboxImage: (lightboxImage) => set({ lightboxImage }),
   setViewMode: (viewMode) => set({ viewMode }),
   
   selectedImage: null,
@@ -47,9 +53,7 @@ export const useAppStore = create<AppState>((set) => ({
   showRightSidebar: false,
   setShowRightSidebar: (showRightSidebar) => set({ showRightSidebar }),
 
-  theme: 'dark',
-  setTheme: (theme) => set({ theme }),
-  
+
   stats: { photos: 0, faces: 0, people: 0 },
   setStats: (stats) => set({ stats }),
 }));

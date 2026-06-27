@@ -1,8 +1,19 @@
 import axios from 'axios';
 
-const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api',
+let BASE_URL = 'http://127.0.0.1:8000';
+export const api = axios.create({
+  baseURL: `${BASE_URL}/api`,
 });
+
+export const initApi = async () => {
+  // @ts-ignore
+  if (window.electronAPI && window.electronAPI.getBackendPort) {
+    // @ts-ignore
+    const port = await window.electronAPI.getBackendPort();
+    BASE_URL = `http://127.0.0.1:${port}`;
+    api.defaults.baseURL = `${BASE_URL}/api`;
+  }
+};
 
 export const scanFolder = async (folderPath: string) => {
   const { data } = await api.post('/scan', { folder_path: folderPath });
@@ -24,5 +35,16 @@ export const getSearch = async (query: string) => {
   return data;
 };
 
-export const getImageUrl = (path: string) => `http://127.0.0.1:8000/media/image?path=${encodeURIComponent(path)}`;
-export const getFaceThumbnailUrl = (faceId: number) => `http://127.0.0.1:8000/media/thumbnail/${faceId}`;
+export const getStats = async () => {
+  const { data } = await api.get('/stats');
+  return data;
+};
+
+export const getImagesForFace = async (faceId: number) => {
+  const { data } = await api.get(`/faces/${faceId}/images`);
+  return data.images || [];
+};
+
+export const getImageUrl = (path: string) => `${BASE_URL}/media/image?path=${encodeURIComponent(path)}`;
+export const getPreviewUrl = (path: string) => `${BASE_URL}/media/preview?path=${encodeURIComponent(path)}`;
+export const getFaceThumbnailUrl = (faceId: number) => `${BASE_URL}/media/thumbnail/${faceId}`;
