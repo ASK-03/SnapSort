@@ -3,6 +3,7 @@ import threading
 import time
 import os
 import logging
+import warnings
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -41,11 +42,9 @@ class Database:
 
     def insert_occurrence(self, image_path, face_id, box):
         """
-        Insert a face occurrence:
-         1) Ensure 'images' has (path, modified)
-         2) Ensure 'faces' has (id, last_seen)
-         3) Insert into 'occurrences'
+        Insert a face occurrence (Deprecated: use insert_occurrences_batch instead).
         """
+        warnings.warn("insert_occurrence is deprecated, use insert_occurrences_batch instead", DeprecationWarning, stacklevel=2)
         with self.lock:
             c = self.conn.cursor()
             # 1) images table
@@ -75,6 +74,43 @@ class Database:
                 (img_id, face_id, x1, y1, x2, y2),
             )
             self.conn.commit()
+
+    def insert_occurrences_batch(self, items: list[tuple[str, int, tuple]]):
+        """Insert all faces for one or more images in a single transaction."""
+        if not items:
+            return
+
+        with self.lock:
+            c = self.conn.cursor()
+            now = time.time()
+            for image_path, face_id, box in items:
+                # 1) images table
+                c.execute(
+                    "INSERT OR IGNORE INTO images(path, modified) VALUES(?, ?)",
+                    (image_path, os.path.getmtime(image_path)),
+                )
+                c.execute("SELECT id FROM images WHERE path = ?", (image_path,))
+                img_id = c.fetchone()[0]
+
+                # 2) faces table
+                c.execute(
+                    "INSERT OR IGNORE INTO faces(id, last_seen) VALUES(?, ?)",
+                    (face_id, now),
+                )
+                # Always update last_seen timestamp
+                c.execute(
+                    "UPDATE faces SET last_seen = ? WHERE id = ?",
+                    (now, face_id),
+                )
+
+                # 3) occurrences table
+                x1, y1, x2, y2 = box
+                c.execute(
+                    "INSERT INTO occurrences(image_id, face_id, x1, y1, x2, y2) "
+                    "VALUES(?, ?, ?, ?, ?, ?)",
+                    (img_id, face_id, x1, y1, x2, y2),
+                )
+            self.conn.commit()  # ONE commit for entire batch
 
     def get_faces_in_image(self, image_path):
         """

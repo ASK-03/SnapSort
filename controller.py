@@ -92,10 +92,14 @@ class Controller(QObject):
         embs_and_boxes = result.get("embeddings", [])
         face_ids = []
 
+        items = []
         for emb, box in embs_and_boxes:
             fid = self.idx.find_or_add(emb)
             face_ids.append(fid)
-            self.db.insert_occurrence(img_path, fid, box)
+            items.append((img_path, fid, box))
+            
+        if items:
+            self.db.insert_occurrences_batch(items)
 
         self.image_to_faces[img_path] = face_ids
         logger.debug("Indexed %s: %s", img_path, face_ids)
