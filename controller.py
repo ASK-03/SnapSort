@@ -1,6 +1,6 @@
 import os
 import logging
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+import asyncio
 from collections import deque
 from multiprocessing import Pool
 import db, indexer, worker
@@ -11,18 +11,15 @@ from search_engine import SearchEngine
 logger = logging.getLogger(__name__)
 
 
-class Controller(QObject):
-    folder_scanned = pyqtSignal(list)  # Emits list of all image paths
-    faces_ready = pyqtSignal(dict)  # Emits { image_path: [face_ids] }
-    face_images_ready = pyqtSignal(int, list)  # Emits (face_id, [paths])
-    images_with_all_faces_ready = pyqtSignal(list)  # Emits [image_paths]
-    image_processed = pyqtSignal(dict)  # Emits processed result dict
-    search_results = pyqtSignal(list)  # Emits [(image_path, score), ...]
-
+class Controller:
     def __init__(self, num_workers=4):
-        super().__init__()
         self.num_workers = num_workers
         logger.info("Initializing Controller with %d workers", self.num_workers)
+
+        # Progress tracking
+        self.total_images = 0
+        self.processed_images = 0
+        self.is_scanning = False
 
         # Initialize database, Faiss index, CLIP index, and worker pool
         self.db         = db.Database("faces.db")
@@ -34,9 +31,6 @@ class Controller(QObject):
         # Search engine (uses main-process CLIP processor for query encoding)
         self._clip_proc   = CLIPProcessor()
         self.search_engine = SearchEngine(self.db, self.clip_index, self._clip_proc)
-        
-        # Connect the signal to ensure thread-safe processing on the main thread
-        self.image_processed.connect(self._process_result)
 
         # Throttling variables
         self.pending_tasks = 0
@@ -47,18 +41,26 @@ class Controller(QObject):
     def scan_folder(self, folder_path):
         """
         Walk 'folder_path' recursively, collect all .jpg/.png/.jpeg files.
-        Emit folder_scanned(all_image_paths). Then queue new images (not yet in DB) for processing.
+        Queue new images (not yet in DB) for processing.
         """
+        if self.is_scanning:
+            return {"error": "Already scanning"}
+            
         logger.info("Scanning folder: %s", folder_path)
+        self.is_scanning = True
+        
         all_image_paths = []
         for root, _, files in os.walk(folder_path):
             for fn in files:
                 if fn.lower().endswith((".jpg", ".png", ".jpeg")):
                     all_image_paths.append(os.path.join(root, fn))
 
-        # Filter out already‐processed images
+        # Filter out already-processed images
         processed = self.db.get_processed_images()
         new_images = [p for p in all_image_paths if p not in processed]
+
+        self.total_images = len(new_images)
+        self.processed_images = 0
 
         logger.info(
             "Found %d total images, %d new to index",
@@ -66,12 +68,11 @@ class Controller(QObject):
             len(new_images),
         )
 
-        # Show everything (old+new) in the gallery immediately
-        self.folder_scanned.emit(all_image_paths)
-
-        # Enqueue only the new images for face‐processing/indexing
+        # Enqueue only the new images for face-processing/indexing
         self.image_queue = deque(new_images)
         self._submit_next_images()
+        
+        return {"total_images": len(all_image_paths), "new_images": len(new_images)}
 
     def _submit_next_images(self):
         """
@@ -97,9 +98,16 @@ class Controller(QObject):
 
     def _handle_image_result(self, result):
         """
-        Callback for each processed image, emitted to Qt main thread safely.
+        Callback for each processed image, runs in a separate thread.
+        We'll schedule the result processing on the asyncio event loop if we are using one, 
+        or just process it synchronously (which is thread-safe for our sqlite/faiss locks).
         """
-        self.image_processed.emit(result)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(self._process_result, result)
+        except RuntimeError:
+            # If no running loop, just run it directly
+            self._process_result(result)
 
     def _process_result(self, result):
         """
@@ -107,6 +115,10 @@ class Controller(QObject):
           { "image": <path>, "embeddings": [ (embedding_vector, (x1,y1,x2,y2)), ... ] }
         """
         self.pending_tasks -= 1
+        self.processed_images += 1
+        
+        if self.processed_images >= self.total_images and self.pending_tasks == 0:
+            self.is_scanning = False
         img_path = result["image"]
 
         # 1. ALWAYS insert the image first to ensure we have an img_id for CLIP!
@@ -144,35 +156,27 @@ class Controller(QObject):
         # Schedule next chunk of images (if any)
         self._submit_next_images()
 
-    def request_faces_in_image(self, image_path):
+    def get_faces_in_image(self, image_path):
         """
-        Called by GUI when the user clicks an image. Queries DB for all face IDs in that image.
-        Emits faces_ready({ image_path: [face_ids] }).
+        Queries DB for all face IDs in that image.
         """
-        fids = self.db.get_faces_in_image(image_path)
-        self.faces_ready.emit({image_path: fids})
+        return self.db.get_faces_in_image(image_path)
 
-    def request_images_for_face(self, face_id):
+    def get_images_for_face(self, face_id):
         """
-        Called by GUI when the user clicks a face thumbnail. Queries DB for all images containing that face.
-        Emits face_images_ready(face_id, [paths]).
+        Queries DB for all images containing that face.
         """
-        paths = self.db.get_images_with_face(face_id)
-        self.face_images_ready.emit(face_id, paths)
+        return self.db.get_images_with_face(face_id)
 
-    def request_images_with_all_faces(self, image_path):
+    def get_images_with_all_faces(self, image_path):
         """
-        Called by GUI after selecting an image: find all face IDs in that image,
-        then query for images that contain all of those face IDs.
-        Emits images_with_all_faces_ready([paths]).
+        Find all face IDs in that image, then query for images that contain all of those face IDs.
         """
         face_ids = self.db.get_faces_in_image(image_path)
         if not face_ids:
-            self.images_with_all_faces_ready.emit([])
-            return
+            return []
 
-        paths = self.db.get_images_with_faces(face_ids)
-        self.images_with_all_faces_ready.emit(paths)
+        return self.db.get_images_with_faces(face_ids)
 
     def merge_face_ids(self, primary_id, other_ids):
         """
@@ -192,9 +196,7 @@ class Controller(QObject):
     def search(self, query: str):
         """
         Run semantic search + face-name reranking.
-        Emits search_results([(image_path, score), ...]).
         """
         if not query.strip():
-            return
-        results = self.search_engine.search(query, top_k=20)
-        self.search_results.emit(results)
+            return []
+        return self.search_engine.search(query, top_k=20)

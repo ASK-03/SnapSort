@@ -1,0 +1,1 @@
+let e=require("electron");e.contextBridge.exposeInMainWorld(`electronAPI`,{openDirectory:()=>e.ipcRenderer.invoke(`dialog:openDirectory`)});

@@ -289,6 +289,17 @@ class Database:
             rows = c.fetchall()
             return {r[0] for r in rows}
 
+    def get_all_images_paginated(self, offset: int = 0, limit: int = 50) -> list[str]:
+        """
+        Returns a paginated list of image paths from the database, ordered by ID.
+        """
+        query = "SELECT path FROM images ORDER BY id LIMIT ? OFFSET ?"
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(query, (limit, offset))
+            rows = c.fetchall()
+            return [r[0] for r in rows]
+
     def get_face_thumbnail(self, face_id):
         """
         Return the path to the 80×80 thumbnail PNG for face_id.
