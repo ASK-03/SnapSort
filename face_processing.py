@@ -42,9 +42,9 @@ def init_face_model():
                 "Run:  python3 scripts/download_models.py"
             )
 
-    # score_threshold=0.75: reduces clothing/texture false positives
+    # score_threshold=0.85: aggressively reduces clothing/texture false positives
     _detector   = cv2.FaceDetectorYN.create(det_path, "", (320, 320),
-                                             score_threshold=0.75, nms_threshold=0.3)
+                                             score_threshold=0.85, nms_threshold=0.3)
     _recognizer = cv2.FaceRecognizerSF.create(rec_path, "")
     logger.info("Face models loaded (YuNet + SFace)")
 

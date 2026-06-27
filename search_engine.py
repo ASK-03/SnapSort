@@ -42,38 +42,41 @@ class SearchEngine:
                 self._nlp = False
         return self._nlp if self._nlp else None
 
-    def _extract_names(self, query: str) -> list[str]:
-        """Return PERSON entity strings found in the query."""
-        nlp = self._get_nlp()
-        if nlp is None:
-            return []
-        doc = nlp(query)
-        return [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
-
-    def _resolve_names(self, names: list[str]) -> dict[str, list[int]]:
+    def _extract_and_resolve_names(self, query: str) -> dict[str, list[int]]:
         """
-        Fuzzy-match each name against all named faces in the DB.
-        Returns {name: [face_id, ...]} for matches with score >= 70.
+        Directly find known database names in the query string (bypassing spaCy NER).
+        Matches exact words or slight typos (via rapidfuzz).
+        Returns {face_name: [face_id, ...]}
         """
-        if not names:
-            return {}
-        named_faces = self.db.get_all_named_faces()   # [(face_id, face_name), ...]
+        named_faces = self.db.get_all_named_faces()
         if not named_faces:
             return {}
 
-        face_names = [fn for _, fn in named_faces]
+        import re
+        query_words = set(re.findall(r'\b\w+\b', query.lower()))
         name_to_fids = {}
 
-        for query_name in names:
-            hits = fuzz_process.extract(
-                query_name, face_names,
-                scorer=fuzz.token_sort_ratio,
-                score_cutoff=70,
-            )
-            matched_ids = [named_faces[face_names.index(h[0])][0] for h in hits]
-            if matched_ids:
-                name_to_fids[query_name] = matched_ids
-
+        for face_id, face_name in named_faces:
+            face_words = set(re.findall(r'\b\w+\b', face_name.lower()))
+            
+            # 1. Exact word overlap (e.g. "Aditya" in query matches "Aditya Dubey" in DB)
+            if face_words.intersection(query_words):
+                name_to_fids.setdefault(face_name, []).append(face_id)
+                continue
+                
+            # 2. Slight typo matching for words >= 3 chars
+            matched = False
+            for fw in face_words:
+                if len(fw) < 3:
+                    continue
+                for qw in query_words:
+                    if fuzz.ratio(fw, qw) >= 85:
+                        name_to_fids.setdefault(face_name, []).append(face_id)
+                        matched = True
+                        break
+                if matched:
+                    break
+                    
         return name_to_fids
 
     def _face_bonus(self, image_id: int, name_to_fids: dict) -> float:
@@ -98,7 +101,7 @@ class SearchEngine:
         return _PENALTY   # name given, none found
 
     # ------------------------------------------------------------------
-    def search(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
+    def search(self, query: str, top_k: int = 20, min_score: float = 0.18) -> list[tuple[str, float]]:
         """
         Full semantic search + reranking.
         Returns [(image_path, score), ...] sorted by descending score.
@@ -107,9 +110,10 @@ class SearchEngine:
             logger.info("CLIP index empty — no results")
             return []
 
-        # 1. NER
-        names = self._extract_names(query)
-        logger.info("Search: %r  names=%s", query, names)
+        # 1. Direct Name Resolution
+        name_to_fids = self._extract_and_resolve_names(query)
+        names_found = list(name_to_fids.keys())
+        logger.info("Search: %r  names_found=%s", query, names_found)
 
         # 2. CLIP text embedding
         query_emb = self.clip_processor.embed_text(query)
@@ -117,16 +121,23 @@ class SearchEngine:
         # 3. FAISS: retrieve 3× top_k candidates for reranking headroom
         candidates = self.clip_index.search(query_emb, k=top_k * 3)
 
-        # 4. Resolve names → face IDs
-        name_to_fids = self._resolve_names(names)
-
-        # 5. Rerank
+        # 4. Rerank
         scored = []
         for image_id, clip_score in candidates:
-            bonus = self._face_bonus(image_id, name_to_fids) if names else 0.0
+            # ViT-B/32 cosine similarity < 0.21 usually means no semantic match
+            if clip_score < min_score:
+                continue
+                
+            bonus = self._face_bonus(image_id, name_to_fids) if names_found else 0.0
+            final_score = clip_score + bonus
+            
+            # If penalized heavily (e.g. specific person requested but not found), skip
+            if final_score < 0.15:
+                continue
+                
             path  = self.db.get_image_path(image_id)
             if path:
-                scored.append((path, clip_score + bonus))
+                scored.append((path, final_score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]

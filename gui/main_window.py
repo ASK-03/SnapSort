@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QStatusBar,
     QApplication,
     QLineEdit,
+    QInputDialog,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThreadPool, QRunnable, QPoint
 from PyQt5.QtGui import QPixmap, QIcon, QPalette, QColor, QFont
@@ -130,7 +131,9 @@ class ThumbnailLoader(QRunnable):
                 return
 
             if not os.path.exists(self.thumb_path):
+                from PIL import ImageOps
                 img = Image.open(self.image_path).convert("RGB")
+                img = ImageOps.exif_transpose(img)
                 img.thumbnail((100, 100), Image.Resampling.LANCZOS)
                 img.save(self.thumb_path, "JPEG", quality=85)
                 img.close()
@@ -156,6 +159,7 @@ class MainWindow(QMainWindow):
         self.all_image_paths = []
         self.in_filtered_view = False
         self.failed_images = set()
+        self._people_mode = False   # True while People view is active
         self.thumbnail_dir = os.path.join(os.path.dirname(__file__), "thumbnails")
         os.makedirs(self.thumbnail_dir, exist_ok=True)
 
@@ -226,16 +230,20 @@ class MainWindow(QMainWindow):
         self.btn_select.clicked.connect(self.select_folder)
         left_layout.addWidget(self.btn_select)
 
-        # Search bar
-        search_row = QHBoxLayout()
+        # Top toolbar row: Search + People button
+        toolbar = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search images… (e.g. 'Rahul hiking')")
         self.search_input.returnPressed.connect(self._on_search)
         self.btn_search = QPushButton("Search")
         self.btn_search.clicked.connect(self._on_search)
-        search_row.addWidget(self.search_input)
-        search_row.addWidget(self.btn_search)
-        left_layout.addLayout(search_row)
+        self.btn_people = QPushButton("👥 People")
+        self.btn_people.setToolTip("View all detected face clusters")
+        self.btn_people.clicked.connect(self._show_people_view)
+        toolbar.addWidget(self.search_input)
+        toolbar.addWidget(self.btn_search)
+        toolbar.addWidget(self.btn_people)
+        left_layout.addLayout(toolbar)
 
         self.btn_back = QPushButton("Back to All Images")
         self.btn_back.clicked.connect(self.back_to_gallery)
@@ -250,6 +258,7 @@ class MainWindow(QMainWindow):
         self.gallery_list.setWrapping(True)
         self.gallery_list.setGridSize(QSize(110, 110))
         self.gallery_list.itemClicked.connect(self.on_image_clicked)
+        self.gallery_list.itemDoubleClicked.connect(self._on_gallery_double_clicked)
         self.gallery_list.setMinimumWidth(550)
         self.gallery_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.gallery_list.customContextMenuRequested.connect(self.open_context_menu)
@@ -272,8 +281,9 @@ class MainWindow(QMainWindow):
         self.face_list.setIconSize(QSize(80, 80))
         self.face_list.setFlow(QListWidget.LeftToRight)
         self.face_list.setWrapping(True)
-        self.face_list.setGridSize(QSize(90, 90))
+        self.face_list.setGridSize(QSize(90, 110))   # taller grid to show name text
         self.face_list.itemClicked.connect(self.on_face_clicked)
+        self.face_list.itemDoubleClicked.connect(self._on_face_double_clicked)
         right_split.addWidget(self.face_list)
 
         self.matching_list = QListWidget()
@@ -477,10 +487,14 @@ class MainWindow(QMainWindow):
         """
         path = item.data(Qt.UserRole)
         try:
-            pix = QPixmap(path).scaled(500, 500, Qt.KeepAspectRatio)
-            if pix.isNull():
+            from PyQt5.QtGui import QImageReader
+            reader = QImageReader(path)
+            reader.setAutoTransform(True)
+            img = reader.read()
+            if img.isNull():
                 self.viewer_label.setText("Failed to load image")
                 return
+            pix = QPixmap.fromImage(img).scaled(500, 500, Qt.KeepAspectRatio)
             self.viewer_label.setPixmap(pix)
             self.face_list.clear()
             self.matching_list.clear()
@@ -500,7 +514,8 @@ class MainWindow(QMainWindow):
             if not face_ids:
                 return
             for fid in face_ids:
-                thumb = self.controller.db.get_face_thumbnail(fid)
+                # Use crop from THIS image so we don't accidentally show someone else's face from a bad merge
+                thumb = self.controller.db.get_face_thumbnail_from_image(fid, path)
                 pix = QPixmap(thumb) if thumb else QPixmap()
                 if pix.isNull():
                     continue
@@ -508,6 +523,13 @@ class MainWindow(QMainWindow):
                 item = QListWidgetItem()
                 item.setIcon(QIcon(pix))
                 item.setData(Qt.UserRole, fid)
+                
+                # Show name if available
+                name = self.controller.db.get_face_name(fid)
+                if name:
+                    item.setText(name)
+                    item.setTextAlignment(Qt.AlignCenter)
+                    
                 self.face_list.addItem(item)
             QTimer.singleShot(0, self.face_list.repaint)
 
@@ -522,7 +544,9 @@ class MainWindow(QMainWindow):
                 continue
             thumb = self.get_thumbnail_path(path)
             if not os.path.exists(thumb):
+                from PIL import ImageOps
                 img = Image.open(path).convert("RGB")
+                img = ImageOps.exif_transpose(img)
                 img.thumbnail((80, 80), Image.Resampling.LANCZOS)
                 img.save(thumb, "JPEG", quality=85)
                 img.close()
@@ -606,3 +630,63 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(0, self._load_visible_thumbnails)
         QTimer.singleShot(50, self.gallery_list.repaint)
+
+    # ------------------------------------------------------------------
+    # Face Naming & People View
+    # ------------------------------------------------------------------
+
+    def _show_people_view(self):
+        """
+        Show a gallery of all unique faces (the People view).
+        """
+        self.clear_gallery()
+        self._people_mode = True
+        self.in_filtered_view = True
+        self.btn_back.show()
+        
+        face_ids = self.controller.db.get_all_face_ids()
+        self.statusBar.showMessage(f"{len(face_ids)} people found.")
+        
+        for fid in face_ids:
+            thumb = self.controller.db.get_face_thumbnail(fid)
+            if not thumb:
+                continue
+            
+            name = self.controller.db.get_face_name(fid) or f"Unknown #{fid}"
+            
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, fid)  # store face_id
+            pix = QPixmap(thumb).scaled(100, 100, Qt.KeepAspectRatio)
+            item.setIcon(QIcon(pix))
+            item.setText(name)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.gallery_list.addItem(item)
+            
+        QTimer.singleShot(50, self.gallery_list.repaint)
+
+    def _on_face_double_clicked(self, item):
+        """
+        Triggered when a face thumbnail is double-clicked (in face_list).
+        Also used if we double-click a face in the People view gallery.
+        """
+        face_id = item.data(Qt.UserRole)
+        current_name = self.controller.db.get_face_name(face_id) or ""
+        
+        name, ok = QInputDialog.getText(
+            self, "Name Person", "Enter a name for this person:", text=current_name
+        )
+        if ok:
+            self.controller.rename_face(face_id, name)
+            # Update the item text if we are in the People view
+            if self._people_mode:
+                item.setText(name.strip() or f"Unknown #{face_id}")
+            else:
+                item.setText(name.strip())
+            
+    def _on_gallery_double_clicked(self, item):
+        """
+        If in People view, double click means rename face.
+        If in Image view, we don't do anything special (yet).
+        """
+        if self._people_mode:
+            self._on_face_double_clicked(item)
