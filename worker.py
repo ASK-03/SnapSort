@@ -14,7 +14,17 @@ def process_image(path):
     try:
         img = Image.open(path).convert("RGB")
         img = ImageOps.exif_transpose(img)  # Correct orientation (EXIF)
-        arr = np.array(img)
+
+        # Downscale for face detection (HOG doesn't need >1080p)
+        MAX_DIM = 1920
+        if max(img.size) > MAX_DIM:
+            scale = MAX_DIM / max(img.size)
+            det_img = img.resize((int(img.width * scale), int(img.height * scale)))
+        else:
+            det_img = img
+            scale = 1.0
+        
+        arr = np.array(det_img)
 
         boxes = detect_faces(arr)  # list of (x1, y1, x2, y2)
         embs_and_boxes = []
