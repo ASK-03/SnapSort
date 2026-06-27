@@ -14,6 +14,10 @@ Website: [https://snapsort-website.vercel.app/](https://snapsort-website.vercel.
 
 > 📌 **Want to see what's coming next?** Check out the [todo.md](todo.md) for upcoming features, fixes, and improvements.
 
+## Architecture
+
+![SnapSort Architecture](assets/architecture.png)
+
 ## Features
 
 - **Instant Thumbnail Gallery**: Loads and displays all images in a selected folder immediately, with a masonry layout.
