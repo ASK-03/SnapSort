@@ -206,6 +206,19 @@ class Database:
             c.execute("SELECT DISTINCT id FROM faces ORDER BY id")
             return [r[0] for r in c.fetchall()]
 
+    def get_all_faces_with_counts(self) -> list[dict]:
+        """Return all faces with their names and occurrence counts."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("""
+                SELECT f.id, f.name, COUNT(o.image_id) 
+                FROM faces f
+                LEFT JOIN occurrences o ON f.id = o.face_id
+                GROUP BY f.id
+                ORDER BY f.id
+            """)
+            return [{"id": r[0], "name": r[1], "count": r[2]} for r in c.fetchall()]
+
     def get_faces_in_image(self, image_path):
         """
         Return a list of face_ids found in 'image_path'.
@@ -276,13 +289,11 @@ class Database:
 
     def get_processed_images(self):
         """
-        Returns a set of paths for all images that have at least one occurrence inserted.
+        Returns a set of paths for all images that have been processed.
+        Since we insert every processed image into the 'images' table (even those without faces),
+        we can just return all paths from the 'images' table.
         """
-        query = (
-            "SELECT DISTINCT images.path "
-            "FROM occurrences "
-            "JOIN images ON occurrences.image_id = images.id"
-        )
+        query = "SELECT path FROM images"
         with self.lock:
             c = self.conn.cursor()
             c.execute(query)
@@ -299,6 +310,18 @@ class Database:
             c.execute(query, (limit, offset))
             rows = c.fetchall()
             return [r[0] for r in rows]
+
+    def get_stats(self):
+        with self.lock:
+            c = self.conn.cursor()
+            total_images = c.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+            total_faces = c.execute("SELECT COUNT(DISTINCT id) FROM faces").fetchone()[0]
+            total_people = c.execute("SELECT COUNT(DISTINCT name) FROM faces WHERE name IS NOT NULL AND name != ''").fetchone()[0]
+            return {
+                "photos": total_images,
+                "faces": total_faces,
+                "people": total_people
+            }
 
     def get_face_thumbnail(self, face_id):
         """

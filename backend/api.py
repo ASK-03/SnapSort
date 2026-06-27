@@ -50,6 +50,11 @@ async def get_progress():
         "pending_tasks": controller.pending_tasks
     }
 
+@app.get("/api/stats")
+async def get_stats():
+    """Get statistics for the sidebar"""
+    return controller.db.get_stats()
+
 @app.get("/api/images")
 async def get_images(offset: int = 0, limit: int = 50):
     """Fetch paginated list of all images"""
@@ -58,18 +63,18 @@ async def get_images(offset: int = 0, limit: int = 50):
 
 @app.get("/api/images/faces")
 async def get_faces_in_image(image_path: str):
-    """Get all face IDs found in a specific image"""
+    """Get all face IDs and names found in a specific image"""
     face_ids = controller.get_faces_in_image(image_path)
-    return {"face_ids": face_ids}
+    result = []
+    for fid in face_ids:
+        name = controller.db.get_face_name(fid)
+        result.append({"id": fid, "name": name})
+    return {"faces": result}
 
 @app.get("/api/faces")
 async def get_faces():
     """Fetch all unique face clusters (for the People view)"""
-    face_ids = controller.db.get_all_face_ids()
-    faces = []
-    for fid in face_ids:
-        name = controller.db.get_face_name(fid)
-        faces.append({"id": fid, "name": name})
+    faces = controller.db.get_all_faces_with_counts()
     return {"faces": faces}
 
 @app.get("/api/faces/{face_id}/images")
@@ -110,6 +115,30 @@ async def serve_image(path: str):
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(path)
 
+import asyncio
+from PIL import Image, ImageOps
+import io
+from fastapi.responses import Response
+
+def generate_preview(path: str, size: int):
+    with Image.open(path) as img:
+        img = ImageOps.exif_transpose(img)
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="JPEG", quality=75)
+        return buf.getvalue()
+
+@app.get("/media/preview")
+async def serve_preview(path: str, size: int = 400):
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    try:
+        # Run CPU-bound PIL operation in a separate thread to unblock the event loop
+        img_bytes = await asyncio.to_thread(generate_preview, path, size)
+        return Response(content=img_bytes, media_type="image/jpeg")
+    except Exception as e:
+        return FileResponse(path)
+
 @app.get("/media/thumbnail/{face_id}")
 async def serve_thumbnail(face_id: int):
     """Serve the generated thumbnail for a face"""
@@ -118,5 +147,11 @@ async def serve_thumbnail(face_id: int):
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     return FileResponse(path)
 
+import sys
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="127.0.0.1", port=8000, reload=False)
+    port = 8000
+    if "--port" in sys.argv:
+        port_idx = sys.argv.index("--port")
+        if port_idx + 1 < len(sys.argv):
+            port = int(sys.argv[port_idx + 1])
+    uvicorn.run("api:app", host="127.0.0.1", port=port, reload=False)

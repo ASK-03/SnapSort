@@ -18,7 +18,7 @@ _detector   = None   # cv2.FaceDetectorYN
 _recognizer = None   # cv2.FaceRecognizerSF
 
 # Resolve models dir relative to this file so it works both in-place and packaged
-_MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
 
 
 def _model_path(filename):

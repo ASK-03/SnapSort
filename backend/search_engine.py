@@ -123,7 +123,12 @@ class SearchEngine:
 
         # 4. Rerank
         scored = []
+        seen_images = set()
         for image_id, clip_score in candidates:
+            if image_id in seen_images:
+                continue
+            seen_images.add(image_id)
+
             # ViT-B/32 cosine similarity < 0.21 usually means no semantic match
             if clip_score < min_score:
                 continue

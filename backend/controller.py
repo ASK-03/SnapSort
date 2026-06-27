@@ -22,9 +22,9 @@ class Controller:
         self.is_scanning = False
 
         # Initialize database, Faiss index, CLIP index, and worker pool
-        self.db         = db.Database("faces.db")
-        self.idx        = indexer.FaissIndex("faces.index")
-        self.clip_index = CLIPIndex("clip.index")
+        self.db         = db.Database("data/faces.db")
+        self.idx        = indexer.FaissIndex("data/faces.index")
+        self.clip_index = CLIPIndex("data/clip.index")
         self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
         self.image_to_faces = {}
 
