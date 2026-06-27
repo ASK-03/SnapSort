@@ -41,6 +41,10 @@ jobs:
           cd desktop
           npm install
 
+      - name: Install bsdtar for pacman (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
       - name: Build Electron App
         run: |
           mkdir -p models
