@@ -35,6 +35,8 @@ class Database:
                 "  face_id INTEGER, "
                 "  x1 INTEGER, y1 INTEGER, x2 INTEGER, y2 INTEGER)"
             )
+            c.execute("CREATE INDEX IF NOT EXISTS idx_occ_face ON occurrences(image_id, face_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_occ_image ON occurrences(face_id, image_id)")
             self.conn.commit()
 
     def insert_occurrence(self, image_path, face_id, box):
