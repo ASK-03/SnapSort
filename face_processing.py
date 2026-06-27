@@ -14,12 +14,17 @@ def detect_faces(image):
     return [(left, top, right, bottom) for top, right, bottom, left in boxes]
 
 
-def compute_embedding(face_img):
-    """
-    Given a numpy array of a cropped face, return a 128‐dim embedding.
-    If no encodings are found, return a zero vector (and log a warning).
-    """
-    encs = face_recognition.face_encodings(face_img)
+def compute_embedding(full_image, face_location):
+    """Pass known location to skip redundant face detection."""
+    # Our face_location is (x1, y1, x2, y2)
+    # face_recognition expects (top, right, bottom, left)
+    x1, y1, x2, y2 = face_location
+    top, right, bottom, left = y1, x2, y2, x1
+
+    encs = face_recognition.face_encodings(
+        full_image, 
+        known_face_locations=[(top, right, bottom, left)]
+    )
     if encs:
         return encs[0].astype("float32")
     logger.warning("No embedding computed; returning zero vector")

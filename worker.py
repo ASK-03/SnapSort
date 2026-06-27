@@ -30,13 +30,17 @@ def process_image(path):
             scale = 1.0
         
         arr = np.array(det_img)
+        full_arr = np.array(img)  # Need full image for embedding
 
-        boxes = detect_faces(arr)  # list of (x1, y1, x2, y2)
+        boxes = detect_faces(arr)  # list of (x1, y1, x2, y2) on downscaled image
+        
+        # Scale boxes back to original coordinates
+        orig_boxes = [(int(x1/scale), int(y1/scale), int(x2/scale), int(y2/scale)) 
+                      for x1, y1, x2, y2 in boxes]
+
         embs_and_boxes = []
-        for box in boxes:
-            x1, y1, x2, y2 = box
-            crop = img.crop((x1, y1, x2, y2))
-            emb = compute_embedding(np.array(crop))
+        for box in orig_boxes:
+            emb = compute_embedding(full_arr, box)
             embs_and_boxes.append((emb, box))
 
         return {"image": path, "embeddings": embs_and_boxes}
