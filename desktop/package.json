@@ -3,6 +3,8 @@
   "private": true,
   "version": "3.0.0",
   "description": "AI-powered local photo manager",
+  "author": "SnapSort Team <snapsort@ask03.in>",
+  "homepage": "https://github.com/ASK-03/SnapSort",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -18,24 +20,37 @@
       "output": "release"
     },
     "mac": {
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb", "pacman"]
+      "target": [
+        "AppImage",
+        "deb",
+        "pacman"
+      ]
     },
     "extraResources": [
       {
         "from": "../backend/dist",
         "to": "backend",
-        "filter": ["api", "api.exe"]
+        "filter": [
+          "api",
+          "api.exe"
+        ]
       },
       {
         "from": "../models",
         "to": "models",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },
