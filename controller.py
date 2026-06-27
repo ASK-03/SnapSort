@@ -13,6 +13,7 @@ class Controller(QObject):
     faces_ready = pyqtSignal(dict)  # Emits { image_path: [face_ids] }
     face_images_ready = pyqtSignal(int, list)  # Emits (face_id, [paths])
     images_with_all_faces_ready = pyqtSignal(list)  # Emits [image_paths]
+    image_processed = pyqtSignal(dict)  # Emits processed result dict
 
     def __init__(self, num_workers=4):
         super().__init__()
@@ -24,6 +25,9 @@ class Controller(QObject):
         self.idx = indexer.FaissIndex("faces.index")
         self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
         self.image_to_faces = {}
+        
+        # Connect the signal to ensure thread-safe processing on the main thread
+        self.image_processed.connect(self._process_result)
 
         # Throttling variables
         self.pending_tasks = 0
@@ -84,9 +88,9 @@ class Controller(QObject):
 
     def _handle_image_result(self, result):
         """
-        Callback for each processed image, scheduled on Qt main thread.
+        Callback for each processed image, emitted to Qt main thread safely.
         """
-        QTimer.singleShot(0, lambda: self._process_result(result))
+        self.image_processed.emit(result)
 
     def _process_result(self, result):
         """
