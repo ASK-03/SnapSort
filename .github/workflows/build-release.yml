@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -58,7 +58,11 @@ jobs:
         if: success()
         with:
           files: |
-            desktop/dist/*
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.deb
+            desktop/release/*.AppImage
+            desktop/release/*.pacman
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
