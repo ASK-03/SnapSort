@@ -42,6 +42,7 @@ jobs:
 
       - name: Build Electron App
         run: |
+          mkdir -p models
           cd desktop
           npm run build
         env:

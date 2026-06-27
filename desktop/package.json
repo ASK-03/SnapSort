@@ -5,6 +5,10 @@
   "description": "AI-powered local photo manager",
   "author": "SnapSort Team <snapsort@ask03.in>",
   "homepage": "https://github.com/ASK-03/SnapSort",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ASK-03/SnapSort.git"
+  },
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
