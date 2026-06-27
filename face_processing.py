@@ -1,31 +1,95 @@
-import face_recognition
-import numpy as np
+"""
+Face detection (YuNet) and embedding (SFace) via OpenCV DNN.
+Both models are from the OpenCV Zoo — lightweight, CPU-optimised, packagable.
+
+  YuNet  : ~375 KB   — face detector, returns bboxes + 5 keypoints
+  SFace  : ~37  MB   — ArcFace-based recogniser, outputs 128-d L2-normalised embeddings
+
+Cosine similarity is used for clustering (inner-product on L2-normalised vecs).
+"""
+import os
 import logging
+import numpy as np
+import cv2
 
 logger = logging.getLogger(__name__)
 
+_detector   = None   # cv2.FaceDetectorYN
+_recognizer = None   # cv2.FaceRecognizerSF
 
-def detect_faces(image):
+# Resolve models dir relative to this file so it works both in-place and packaged
+_MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+
+
+def _model_path(filename):
+    return os.path.join(_MODELS_DIR, filename)
+
+
+def init_face_model():
     """
-    Given a numpy array (H×W×3), return a list of bounding boxes in (x1, y1, x2, y2) format.
-    face_recognition.face_locations returns (top, right, bottom, left) → convert accordingly.
+    Load YuNet + SFace once per process.
+    Called by worker._worker_init() so each pool worker loads models exactly once.
     """
-    boxes = face_recognition.face_locations(image, model="hog")
-    return [(left, top, right, bottom) for top, right, bottom, left in boxes]
+    global _detector, _recognizer
+
+    det_path = _model_path("face_detection_yunet_2023mar.onnx")
+    rec_path = _model_path("face_recognition_sface_2021dec.onnx")
+
+    for p in (det_path, rec_path):
+        if not os.path.exists(p):
+            raise FileNotFoundError(
+                f"Model not found: {p}\n"
+                "Run:  python3 scripts/download_models.py"
+            )
+
+    # Detector is initialised with a placeholder size; we call setInputSize per image.
+    _detector   = cv2.FaceDetectorYN.create(det_path, "", (320, 320),
+                                             score_threshold=0.6, nms_threshold=0.3)
+    _recognizer = cv2.FaceRecognizerSF.create(rec_path, "")
+    logger.info("Face models loaded (YuNet + SFace)")
 
 
-def compute_embedding(full_image, face_location):
-    """Pass known location to skip redundant face detection."""
-    # Our face_location is (x1, y1, x2, y2)
-    # face_recognition expects (top, right, bottom, left)
-    x1, y1, x2, y2 = face_location
-    top, right, bottom, left = y1, x2, y2, x1
+def detect_and_embed(rgb_array: np.ndarray) -> list[tuple[np.ndarray, tuple]]:
+    """
+    Detect faces in an RGB numpy array and return 128-d L2-normalised embeddings.
 
-    encs = face_recognition.face_encodings(
-        full_image, 
-        known_face_locations=[(top, right, bottom, left)]
-    )
-    if encs:
-        return encs[0].astype("float32")
-    logger.warning("No embedding computed; returning zero vector")
-    return np.zeros((128,), dtype="float32")
+    Returns:
+        List of (embedding: float32 ndarray shape (128,), bbox: (x1, y1, x2, y2))
+    """
+    if _detector is None or _recognizer is None:
+        raise RuntimeError("Call init_face_model() before detect_and_embed()")
+
+    h, w = rgb_array.shape[:2]
+    bgr = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+
+    _detector.setInputSize((w, h))
+    _, faces = _detector.detect(bgr)
+
+    if faces is None:
+        return []
+
+    results = []
+    for face in faces:
+        # YuNet row: [x, y, w, h, kp0x, kp0y, ..., kp4x, kp4y, score]
+        x, y, fw, fh = int(face[0]), int(face[1]), int(face[2]), int(face[3])
+        x1 = max(0, x)
+        y1 = max(0, y)
+        x2 = min(w, x + fw)
+        y2 = min(h, y + fh)
+
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        # alignCrop produces a 112×112 aligned face crop (SFace's expected input)
+        aligned = _recognizer.alignCrop(bgr, face)
+        raw_emb = _recognizer.feature(aligned)          # shape (1, 128)
+        emb = raw_emb.flatten().astype("float32")
+
+        # L2-normalise so dot-product == cosine similarity
+        norm = np.linalg.norm(emb)
+        if norm > 0:
+            emb /= norm
+
+        results.append((emb, (x1, y1, x2, y2)))
+
+    return results
