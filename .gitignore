@@ -1,4 +1,6 @@
-env 
+env
+.venv
+*.spec 
 __pycache__
 dlib
 resources
