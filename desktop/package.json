@@ -28,9 +28,9 @@
     },
     "extraResources": [
       {
-        "from": "../backend",
+        "from": "../backend/dist",
         "to": "backend",
-        "filter": ["**/*"]
+        "filter": ["api", "api.exe"]
       },
       {
         "from": "../models",

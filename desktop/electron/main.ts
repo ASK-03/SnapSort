@@ -37,22 +37,29 @@ function checkPythonInstalled(): Promise<boolean> {
 
 function startPythonBackend(port: number) {
   const isWin = process.platform === 'win32';
-  const pythonExecutable = isWin ? 'python' : 'python3';
-  
-  const backendDir = app.isPackaged 
-    ? path.join(process.resourcesPath, 'backend') 
-    : path.join(__dirname, '../../backend');
-  const apiScript = path.join(backendDir, 'api.py');
-  
-  const cwd = app.isPackaged 
-    ? process.resourcesPath 
-    : path.join(__dirname, '../../');
+  let pythonExecutable: string;
+  let args: string[];
+  let cwd: string;
+
+  if (app.isPackaged) {
+    // In production, execute the compiled PyInstaller binary
+    const binaryName = isWin ? 'api.exe' : 'api';
+    pythonExecutable = path.join(process.resourcesPath, 'backend', binaryName);
+    args = ['--port', port.toString()];
+    cwd = process.resourcesPath;
+  } else {
+    // In development, run the python script using the system interpreter
+    pythonExecutable = isWin ? 'python' : 'python3';
+    const apiScript = path.join(__dirname, '../../backend/api.py');
+    args = [apiScript, '--port', port.toString()];
+    cwd = path.join(__dirname, '../../');
+  }
 
   console.log(`Starting Python backend on port ${port}...`)
   console.log(`Executable: ${pythonExecutable}`)
-  console.log(`Script: ${apiScript}`)
+  console.log(`Args: ${args.join(' ')}`)
 
-  pythonProcess = spawn(pythonExecutable, [apiScript, '--port', port.toString()], {
+  pythonProcess = spawn(pythonExecutable, args, {
     cwd: cwd,
     stdio: 'pipe'
   })
@@ -110,14 +117,17 @@ app.on('will-quit', () => {
 })
 
 app.whenReady().then(async () => {
-  const hasPython = await checkPythonInstalled();
-  if (!hasPython) {
-    dialog.showErrorBox(
-      'Python Required',
-      'SnapSort requires Python 3.10+ to be installed on your system to run its AI backend. Please install Python and try again.'
-    );
-    app.quit();
-    return;
+  // Only check for Python installation in development mode
+  if (!app.isPackaged) {
+    const hasPython = await checkPythonInstalled();
+    if (!hasPython) {
+      dialog.showErrorBox(
+        'Python Required (Development Mode)',
+        'SnapSort requires Python 3.10+ to be installed on your system for local development. Please install Python and try again.'
+      );
+      app.quit();
+      return;
+    }
   }
 
   try {
