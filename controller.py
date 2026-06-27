@@ -2,7 +2,7 @@ import os
 import logging
 from PyQt5.QtCore import QObject, pyqtSignal
 from collections import deque
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 import db, indexer, worker
 
 logger = logging.getLogger(__name__)
@@ -23,8 +23,7 @@ class Controller(QObject):
         self.db = db.Database("faces.db")
         self.idx = indexer.FaissIndex("faces.index")
         self.pool = Pool(processes=self.num_workers)
-        self.manager = Manager()
-        self.image_to_faces = self.manager.dict()
+        self.image_to_faces = {}
 
         # Throttling variables
         self.pending_tasks = 0
