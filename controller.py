@@ -1,6 +1,6 @@
 import os
 import logging
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from collections import deque
 from multiprocessing import Pool
 import db, indexer, worker
@@ -83,6 +83,12 @@ class Controller(QObject):
         self._submit_next_images()
 
     def _handle_image_result(self, result):
+        """
+        Callback for each processed image, scheduled on Qt main thread.
+        """
+        QTimer.singleShot(0, lambda: self._process_result(result))
+
+    def _process_result(self, result):
         """
         Callback for each processed image. 'result' is a dict:
           { "image": <path>, "embeddings": [ (embedding_vector, (x1,y1,x2,y2)), ... ] }
