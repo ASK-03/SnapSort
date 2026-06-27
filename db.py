@@ -129,6 +129,18 @@ class Database:
     # Image ID helpers (needed by CLIPIndex)
     # ------------------------------------------------------------------
 
+    def insert_image(self, image_path: str) -> int:
+        """Insert an image if it doesn't exist, returning its ID."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(
+                "INSERT OR IGNORE INTO images(path, modified) VALUES(?, ?)",
+                (image_path, os.path.getmtime(image_path)),
+            )
+            self.conn.commit()
+            c.execute("SELECT id FROM images WHERE path = ?", (image_path,))
+            return c.fetchone()[0]
+
     def get_image_id(self, image_path: str) -> int | None:
         """Return the SQLite id for an image path, or None if not found."""
         with self.lock:
@@ -186,6 +198,13 @@ class Database:
             c = self.conn.cursor()
             c.execute("SELECT id, name FROM faces WHERE name IS NOT NULL AND name != ''")
             return c.fetchall()
+
+    def get_all_face_ids(self) -> list[int]:
+        """Return all face IDs (ordered by id) for the People view."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT DISTINCT id FROM faces ORDER BY id")
+            return [r[0] for r in c.fetchall()]
 
     def get_faces_in_image(self, image_path):
         """
@@ -300,12 +319,80 @@ class Database:
             img_path, x1, y1, x2, y2 = row
 
         try:
+            from PIL import ImageOps
             img = Image.open(img_path).convert("RGB")
-            crop = img.crop((x1, y1, x2, y2)).resize((80, 80))
+            img = ImageOps.exif_transpose(img)
+            w, h = img.size
+            face_w = x2 - x1
+            face_h = y2 - y1
+            
+            # Pad by 30% of face width/height on each side to show hair/context
+            pad_w = int(face_w * 0.3)
+            pad_h = int(face_h * 0.3)
+            
+            nx1 = max(0, x1 - pad_w)
+            ny1 = max(0, y1 - int(pad_h * 1.5))  # extra padding on top for hair
+            nx2 = min(w, x2 + pad_w)
+            ny2 = min(h, y2 + pad_h)
+            
+            crop = img.crop((nx1, ny1, nx2, ny2)).resize((80, 80))
             crop.save(path)
             return path
         except Exception as e:
             logger.error("Failed to generate thumbnail for face %d: %s", face_id, e)
+            return None
+    def get_face_thumbnail_from_image(self, face_id, image_path):
+        """
+        Return the path to an 80x80 thumbnail PNG for face_id *specifically* from image_path.
+        This prevents false merges from showing the wrong person's face.
+        """
+        import hashlib
+        thumb_dir = os.path.join("resources", "thumbnails")
+        os.makedirs(thumb_dir, exist_ok=True)
+        # Unique name per face occurrence in a specific image
+        path_hash = hashlib.md5(image_path.encode()).hexdigest()
+        path = os.path.join(thumb_dir, f"face_{face_id}_{path_hash}.png")
+
+        if os.path.exists(path):
+            return path
+
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute(
+                "SELECT x1, y1, x2, y2 "
+                "FROM occurrences "
+                "JOIN images ON occurrences.image_id = images.id "
+                "WHERE face_id = ? AND images.path = ? "
+                "LIMIT 1",
+                (face_id, image_path),
+            )
+            row = c.fetchone()
+            if not row:
+                return None
+            x1, y1, x2, y2 = row
+
+        try:
+            from PIL import ImageOps
+            img = Image.open(image_path).convert("RGB")
+            img = ImageOps.exif_transpose(img)
+            w, h = img.size
+            face_w = x2 - x1
+            face_h = y2 - y1
+            
+            # Pad by 30% of face width/height on each side
+            pad_w = int(face_w * 0.3)
+            pad_h = int(face_h * 0.3)
+            
+            nx1 = max(0, x1 - pad_w)
+            ny1 = max(0, y1 - int(pad_h * 1.5))
+            nx2 = min(w, x2 + pad_w)
+            ny2 = min(h, y2 + pad_h)
+            
+            crop = img.crop((nx1, ny1, nx2, ny2)).resize((80, 80))
+            crop.save(path)
+            return path
+        except Exception as e:
+            logger.error("Failed to generate specific thumbnail for face %d in %s: %s", face_id, image_path, e)
             return None
 
     def merge_faces(self, primary_id, other_ids):

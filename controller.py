@@ -108,6 +108,10 @@ class Controller(QObject):
         """
         self.pending_tasks -= 1
         img_path = result["image"]
+
+        # 1. ALWAYS insert the image first to ensure we have an img_id for CLIP!
+        img_id = self.db.insert_image(img_path)
+        
         embs_and_boxes = result.get("embeddings", [])
         face_ids = []
 
@@ -126,10 +130,8 @@ class Controller(QObject):
         # Store CLIP embedding keyed by DB image_id
         clip_emb = result.get("clip_emb")
         if clip_emb is not None:
-            img_id = self.db.get_image_id(img_path)
-            if img_id is not None:
-                self.clip_index.add(img_id, clip_emb)
-                self.db.mark_clip_indexed(img_id)
+            self.clip_index.add(img_id, clip_emb)
+            self.db.mark_clip_indexed(img_id)
 
         self._save_counter += 1
         if self._save_counter % 50 == 0:
@@ -178,13 +180,14 @@ class Controller(QObject):
         """
         if not other_ids:
             return
-
-        # Delegate everything to db.py
         self.db.merge_faces(primary_id, other_ids)
         logger.info("Controller: Requested merge of %s → %d", other_ids, primary_id)
 
-        # **Do NOT rebuild the Faiss index here**. We assume it's acceptable to keep
-        # stale Faiss entries pointing to old vector IDs. Only the DB has changed.
+    def rename_face(self, face_id: int, name: str):
+        """Assign a human-readable name to a face cluster."""
+        cleaned = name.strip()
+        self.db.set_face_name(face_id, cleaned or None)
+        logger.info("Renamed face %d → %r", face_id, cleaned or None)
 
     def search(self, query: str):
         """
