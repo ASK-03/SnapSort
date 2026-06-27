@@ -42,11 +42,16 @@ def init_face_model():
                 "Run:  python3 scripts/download_models.py"
             )
 
-    # Detector is initialised with a placeholder size; we call setInputSize per image.
+    # score_threshold=0.75: reduces clothing/texture false positives
     _detector   = cv2.FaceDetectorYN.create(det_path, "", (320, 320),
-                                             score_threshold=0.6, nms_threshold=0.3)
+                                             score_threshold=0.75, nms_threshold=0.3)
     _recognizer = cv2.FaceRecognizerSF.create(rec_path, "")
     logger.info("Face models loaded (YuNet + SFace)")
+
+
+# Filters applied after detection (in detection-image pixel space)
+_MIN_FACE_PX  = 50    # discard boxes narrower/shorter than this (e.g. patterns on clothes)
+_MAX_ASPECT   = 2.0   # discard very elongated detections (real faces are roughly square)
 
 
 def detect_and_embed(rgb_array: np.ndarray) -> list[tuple[np.ndarray, tuple]]:
@@ -72,6 +77,17 @@ def detect_and_embed(rgb_array: np.ndarray) -> list[tuple[np.ndarray, tuple]]:
     for face in faces:
         # YuNet row: [x, y, w, h, kp0x, kp0y, ..., kp4x, kp4y, score]
         x, y, fw, fh = int(face[0]), int(face[1]), int(face[2]), int(face[3])
+
+        # --- false-positive filters ---
+        # 1. Minimum face size (in detection-image pixels)
+        if fw < _MIN_FACE_PX or fh < _MIN_FACE_PX:
+            continue
+        # 2. Aspect ratio — real faces are roughly square
+        longer  = max(fw, fh)
+        shorter = min(fw, fh)
+        if shorter == 0 or (longer / shorter) > _MAX_ASPECT:
+            continue
+
         x1 = max(0, x)
         y1 = max(0, y)
         x2 = min(w, x + fw)
