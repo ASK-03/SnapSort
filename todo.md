@@ -139,9 +139,14 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ### 🧪 Testing & DevOps
 
-- [ ] **Add unit and integration tests**
+- [ ] **Add unit and regression test cases**
+  - Implement comprehensive tests for the backend (FastAPI) and frontend (React/Zustand) to prevent regressions.
 
-  - Focus on face recognition logic, database integrity, and UI navigation.
+- [ ] **Lazy Model Downloading**
+  - Download ML models dynamically only when they are first needed by the user, rather than requiring all models upfront.
+
+- [ ] **Add support for videos**
+  - Extend scanning and indexing logic to extract frames from videos for facial recognition and semantic search.
 
 - [ ] **Set up GitHub Actions for code quality**
 
