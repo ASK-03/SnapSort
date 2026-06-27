@@ -30,6 +30,7 @@ class Controller(QObject):
         self.pending_tasks = 0
         self.max_pending = self.num_workers
         self.image_queue = deque()
+        self._save_counter = 0
 
     def scan_folder(self, folder_path):
         """
@@ -104,10 +105,12 @@ class Controller(QObject):
         self.image_to_faces[img_path] = face_ids
         logger.debug("Indexed %s: %s", img_path, face_ids)
 
-        try:
-            self.idx.save()
-        except Exception as e:
-            logger.error("Error saving Faiss index: %s", e)
+        self._save_counter += 1
+        if self._save_counter % 50 == 0:
+            try:
+                self.idx.save()
+            except Exception as e:
+                logger.error("Error saving Faiss index: %s", e)
 
         # Schedule next chunk of images (if any)
         self._submit_next_images()
