@@ -10,3 +10,5 @@ todo.txt
 build
 dist
 main.spec
+models/
+face_recognition_models/
