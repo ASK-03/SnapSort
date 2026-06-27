@@ -29,7 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
           cd backend
-          pyinstaller api.py -F --noconfirm --collect-all uvicorn --collect-all fastapi --collect-all onnxruntime --name api
+          pyinstaller api.py -F --noconfirm --collect-all uvicorn --collect-all fastapi --collect-all onnxruntime --collect-all rapidfuzz --name api
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

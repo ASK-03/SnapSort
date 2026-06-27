@@ -1,7 +1,7 @@
 {
   "name": "snapsort",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.0.6",
   "description": "AI-powered local photo manager",
   "author": "SnapSort Team <snapsort@ask03.in>",
   "homepage": "https://github.com/ASK-03/SnapSort",

@@ -7,3 +7,4 @@ pillow
 faiss-cpu
 transformers
 python-multipart
+rapidfuzz
