@@ -6,10 +6,11 @@ import os
 import sys
 import uvicorn
 
-from controller import Controller
-
 # ---------------------------------------------------------------------------
 # Resolve runtime directories (passed by Electron or defaulting for dev)
+# MUST happen before importing controller — the import chain triggers
+# face_processing / clip_processor which read SNAPSORT_MODELS_DIR at
+# module-load time.
 # ---------------------------------------------------------------------------
 def _parse_cli_arg(name: str, default: str) -> str:
     """Read --name VALUE from sys.argv, falling back to *default*."""
@@ -26,9 +27,12 @@ MODELS_DIR = _parse_cli_arg("--models-dir", os.path.join(os.path.dirname(__file_
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# Expose to other modules that import them at module level
+# Expose to other modules that read them during import
 os.environ["SNAPSORT_DATA_DIR"]   = os.path.abspath(DATA_DIR)
 os.environ["SNAPSORT_MODELS_DIR"] = os.path.abspath(MODELS_DIR)
+
+# NOW safe to import controller (triggers face_processing, clip_processor)
+from controller import Controller
 
 app = FastAPI(title="SnapSort API")
 
