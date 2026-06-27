@@ -78,12 +78,13 @@ function App() {
 
   const loadImages = async () => {
     try {
-      const [data, stats] = await Promise.all([
-        getImages(0, 1000),
-        getStats()
-      ]);
-      setImages(data);
+      const stats = await getStats();
       setStats(stats);
+
+      if (!useAppStore.getState().searchQuery.trim()) {
+        const data = await getImages(0, 1000);
+        setImages(data);
+      }
     } catch (e) {
       console.error(e);
     }

@@ -328,7 +328,8 @@ class Database:
         Return the path to the 80×80 thumbnail PNG for face_id.
         If it doesn’t exist yet, find the most recent occurrence → crop → save.
         """
-        thumb_dir = os.path.join("resources", "thumbnails")
+        data_dir = os.environ.get("SNAPSORT_DATA_DIR", "data")
+        thumb_dir = os.path.join(data_dir, "thumbnails")
         os.makedirs(thumb_dir, exist_ok=True)
         path = os.path.join(thumb_dir, f"face_{face_id}.png")
 
