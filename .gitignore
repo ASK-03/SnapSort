@@ -12,3 +12,5 @@ dist
 main.spec
 models/
 face_recognition_models/
+
+data
