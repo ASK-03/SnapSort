@@ -23,6 +23,17 @@ Website: [https://snapsort-website.vercel.app/](https://snapsort-website.vercel.
 - **CPU-Optimized & Lightweight**: Uses highly optimized ONNX models that run incredibly fast on standard consumer CPUs.
 - **Privacy First**: 100% offline, local processing.
 
+## Prerequisites
+
+Because SnapSort uses your local hardware to perform AI inference, **Python 3.10 or higher is required** to run the backend engine. SnapSort does NOT bundle a Python environment to keep the application size manageable.
+
+1. Install [Python](https://www.python.org/downloads/).
+2. Install the required AI and backend dependencies by opening your terminal or command prompt and running:
+   ```bash
+   pip install fastapi uvicorn opencv-python-headless onnxruntime numpy pillow faiss-cpu rapidfuzz transformers python-multipart
+   ```
+*(Note: A setup script to automate this on first run is planned for a future update.)*
+
 ## Installation
 
 Download the latest installer for your platform from the [GitHub Releases](https://github.com/ASK-03/SnapSort/releases) page.

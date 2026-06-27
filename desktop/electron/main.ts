@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, exec, ChildProcess } from 'child_process'
 import net from 'net'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -26,17 +26,34 @@ function getFreePort(): Promise<number> {
   });
 }
 
+function checkPythonInstalled(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const pythonExecutable = process.platform === 'win32' ? 'python' : 'python3';
+    exec(`${pythonExecutable} --version`, (error) => {
+      resolve(!error);
+    });
+  });
+}
+
 function startPythonBackend(port: number) {
-  // In development, we run the python script from the parent folder
-  const pythonExecutable = path.join(__dirname, '../../env/bin/python3')
-  const apiScript = path.join(__dirname, '../../backend/api.py')
+  const isWin = process.platform === 'win32';
+  const pythonExecutable = isWin ? 'python' : 'python3';
+  
+  const backendDir = app.isPackaged 
+    ? path.join(process.resourcesPath, 'backend') 
+    : path.join(__dirname, '../../backend');
+  const apiScript = path.join(backendDir, 'api.py');
+  
+  const cwd = app.isPackaged 
+    ? process.resourcesPath 
+    : path.join(__dirname, '../../');
 
   console.log(`Starting Python backend on port ${port}...`)
   console.log(`Executable: ${pythonExecutable}`)
   console.log(`Script: ${apiScript}`)
 
   pythonProcess = spawn(pythonExecutable, [apiScript, '--port', port.toString()], {
-    cwd: path.join(__dirname, '../../'),
+    cwd: cwd,
     stdio: 'pipe'
   })
 
@@ -93,6 +110,16 @@ app.on('will-quit', () => {
 })
 
 app.whenReady().then(async () => {
+  const hasPython = await checkPythonInstalled();
+  if (!hasPython) {
+    dialog.showErrorBox(
+      'Python Required',
+      'SnapSort requires Python 3.10+ to be installed on your system to run its AI backend. Please install Python and try again.'
+    );
+    app.quit();
+    return;
+  }
+
   try {
     backendPort = await getFreePort();
   } catch (e) {

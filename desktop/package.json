@@ -7,9 +7,37 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && electron-builder",
     "lint": "oxlint",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.snapsort.app",
+    "productName": "SnapSort",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": ["dmg"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb", "pacman"]
+    },
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../models",
+        "to": "models",
+        "filter": ["**/*"]
+      }
+    ]
   },
   "dependencies": {
     "axios": "^1.18.1",
@@ -27,6 +55,7 @@
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
     "lucide-react": "^1.21.0",
     "oxlint": "^1.69.0",
     "postcss": "^8.5.15",
