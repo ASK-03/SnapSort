@@ -1,6 +1,7 @@
 import os
 import logging
 from PyQt5.QtCore import QObject, pyqtSignal
+from collections import deque
 from multiprocessing import Pool, Manager
 import db, indexer, worker
 
@@ -28,7 +29,7 @@ class Controller(QObject):
         # Throttling variables
         self.pending_tasks = 0
         self.max_pending = self.num_workers
-        self.image_queue = []
+        self.image_queue = deque()
 
     def scan_folder(self, folder_path):
         """
@@ -56,7 +57,7 @@ class Controller(QObject):
         self.folder_scanned.emit(all_image_paths)
 
         # Enqueue only the new images for face‐processing/indexing
-        self.image_queue = new_images
+        self.image_queue = deque(new_images)
         self._submit_next_images()
 
     def _submit_next_images(self):
@@ -64,7 +65,7 @@ class Controller(QObject):
         If there are queued images and we haven't hit max pending tasks, dispatch them to worker pool.
         """
         while self.image_queue and self.pending_tasks < self.max_pending:
-            path = self.image_queue.pop(0)
+            path = self.image_queue.popleft()
             self.pending_tasks += 1
             self.pool.apply_async(
                 worker.process_image,
