@@ -31,9 +31,6 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.environ["SNAPSORT_DATA_DIR"]   = os.path.abspath(DATA_DIR)
 os.environ["SNAPSORT_MODELS_DIR"] = os.path.abspath(MODELS_DIR)
 
-# NOW safe to import controller (triggers face_processing, clip_processor)
-from controller import Controller
-
 app = FastAPI(title="SnapSort API")
 
 # Allow Electron frontend to access API
@@ -45,8 +42,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global controller instance
-controller = Controller(num_workers=4, data_dir=os.path.abspath(DATA_DIR))
+# ---------------------------------------------------------------------------
+# Lazy controller initialisation.
+#
+# On Windows, multiprocessing uses 'spawn': each Pool worker re-imports this
+# module from scratch.  If Controller (which creates a Pool) is instantiated
+# at module level, every spawned worker would re-create a Pool → infinite
+# recursion → UI freeze / crash.
+#
+# By deferring instantiation to a startup event that only fires in the main
+# (uvicorn) process, workers can safely import api.py without side-effects.
+# ---------------------------------------------------------------------------
+_controller = None   # type: ignore
+
+def _get_controller():
+    """Return the singleton Controller, raising if not yet initialised."""
+    global _controller
+    if _controller is None:
+        raise RuntimeError(
+            "Controller not initialised — this code path should only "
+            "run in the main uvicorn process, not in a Pool worker."
+        )
+    return _controller
+
+@app.on_event("startup")
+def _startup():
+    """Create the Controller (and its Pool) exactly once, in the main process."""
+    global _controller
+    # Import here so the module-level import doesn't trigger Pool creation
+    # in spawned workers that re-import this file.
+    from controller import Controller
+    _controller = Controller(num_workers=4, data_dir=os.path.abspath(DATA_DIR))
+
+# Convenience alias used by every endpoint below
+def controller():
+    return _get_controller()
 
 class ScanRequest(BaseModel):
     folder_path: str
@@ -54,7 +84,7 @@ class ScanRequest(BaseModel):
 @app.get("/api/status")
 async def get_status():
     """Health check for Electron to verify backend is ready"""
-    return {"status": "ok"}
+    return {"status": "ok", "initialised": _controller is not None}
 
 @app.post("/api/scan")
 async def start_scan(req: ScanRequest):
@@ -62,7 +92,7 @@ async def start_scan(req: ScanRequest):
     if not os.path.exists(req.folder_path) or not os.path.isdir(req.folder_path):
         raise HTTPException(status_code=400, detail="Invalid folder path")
         
-    res = controller.scan_folder(req.folder_path)
+    res = controller().scan_folder(req.folder_path)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     return res
@@ -70,44 +100,46 @@ async def start_scan(req: ScanRequest):
 @app.get("/api/progress")
 async def get_progress():
     """Get current scanning progress"""
+    ctrl = controller()
     return {
-        "is_scanning": controller.is_scanning,
-        "total_images": controller.total_images,
-        "processed_images": controller.processed_images,
-        "pending_tasks": controller.pending_tasks
+        "is_scanning": ctrl.is_scanning,
+        "total_images": ctrl.total_images,
+        "processed_images": ctrl.processed_images,
+        "pending_tasks": ctrl.pending_tasks
     }
 
 @app.get("/api/stats")
 async def get_stats():
     """Get statistics for the sidebar"""
-    return controller.db.get_stats()
+    return controller().db.get_stats()
 
 @app.get("/api/images")
 async def get_images(offset: int = 0, limit: int = 50):
     """Fetch paginated list of all images"""
-    images = controller.db.get_all_images_paginated(offset, limit)
+    images = controller().db.get_all_images_paginated(offset, limit)
     return {"images": images}
 
 @app.get("/api/images/faces")
 async def get_faces_in_image(image_path: str):
     """Get all face IDs and names found in a specific image"""
-    face_ids = controller.get_faces_in_image(image_path)
+    ctrl = controller()
+    face_ids = ctrl.get_faces_in_image(image_path)
     result = []
     for fid in face_ids:
-        name = controller.db.get_face_name(fid)
+        name = ctrl.db.get_face_name(fid)
         result.append({"id": fid, "name": name})
     return {"faces": result}
 
 @app.get("/api/faces")
 async def get_faces():
     """Fetch all unique face clusters (for the People view)"""
-    faces = controller.db.get_all_faces_with_counts()
+    faces = controller().db.get_all_faces_with_counts()
     return {"faces": faces}
 
 @app.get("/api/faces/{face_id}/images")
 async def get_images_for_face(face_id: int):
     """Fetch all images containing a specific person"""
-    images = controller.get_images_for_face(face_id)
+    images = controller().get_images_for_face(face_id)
     return {"images": images}
 
 class RenameRequest(BaseModel):
@@ -116,7 +148,7 @@ class RenameRequest(BaseModel):
 @app.put("/api/faces/{face_id}")
 async def rename_face(face_id: int, req: RenameRequest):
     """Rename a face cluster"""
-    controller.rename_face(face_id, req.name)
+    controller().rename_face(face_id, req.name)
     return {"status": "ok"}
 
 class MergeRequest(BaseModel):
@@ -126,13 +158,13 @@ class MergeRequest(BaseModel):
 @app.post("/api/faces/merge")
 async def merge_faces(req: MergeRequest):
     """Merge multiple face clusters together"""
-    controller.merge_face_ids(req.primary_id, req.other_ids)
+    controller().merge_face_ids(req.primary_id, req.other_ids)
     return {"status": "ok"}
 
 @app.get("/api/search")
 async def search_images(q: str):
     """Semantic text and name search"""
-    results = controller.search(q)
+    results = controller().search(q)
     return [{"path": path, "score": float(score)} for path, score in results]
 
 # Endpoints to serve actual files
@@ -169,12 +201,28 @@ async def serve_preview(path: str, size: int = 400):
 @app.get("/media/thumbnail/{face_id}")
 async def serve_thumbnail(face_id: int):
     """Serve the generated thumbnail for a face"""
-    path = controller.db.get_face_thumbnail(face_id)
+    path = controller().db.get_face_thumbnail(face_id)
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Thumbnail not found")
     return FileResponse(path)
 
 if __name__ == "__main__":
+    # ------------------------------------------------------------------
+    # Windows multiprocessing fix:
+    # On Windows, 'spawn' is the only available start method.  Each
+    # spawned worker re-imports this module.  freeze_support() prevents
+    # the re-import from starting another top-level entry point, and
+    # the Controller/Pool creation is deferred to the @app.on_event
+    # ("startup") handler above so it never runs in a worker process.
+    # ------------------------------------------------------------------
+    import multiprocessing
+    multiprocessing.freeze_support()
+    # Explicitly set spawn to be consistent across platforms
+    try:
+        multiprocessing.set_start_method("spawn")
+    except RuntimeError:
+        pass  # already set
+
     port = 8000
     if "--port" in sys.argv:
         port_idx = sys.argv.index("--port")
