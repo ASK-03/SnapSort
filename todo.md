@@ -1,39 +1,45 @@
-# ✅ TODO: SnapSort
+# TODO: SnapSort
 
 This document outlines upcoming features, improvements, and bug fixes for **SnapSort**, organized by priority for efficient tracking and development.
 
 ---
 
-## 🔁 Version 2.0.0 Plan
+## Version 2.0.0 Plan
 
-### 🧠 Core Functionality
+### Core Functionality
 
-- [x] **Adding Human Feedback Loop to club same faces that are recognized as different**  
+- [x] **Adding Human Feedback Loop to club same faces that are recognized as different**
        A complete different window which contains all the faces and human can select the faces that are same.
 
 
 ---
 
-## 🔁 Version 1.0.0 Plan
+## Version 1.0.0 Plan
 
-### 🧠 Core Functionality
+### Core Functionality
 
-- [x] **Display related images with shared faces**  
-       When an image is selected, show all other images where the same people (faces) also appear together.  
+- [x] **Display related images with shared faces**
+       When an image is selected, show all other images where the same people (faces) also appear together.
        _Hint: Use the existing face-image mapping in the database to retrieve relevant results._
 
 ### Installers
 
-- [x] **Create installers for Windows, Linux, and macOS**  
-       Use `PyInstaller` or `Briefcase` to package the application for each platform.  
+- [x] **Create installers for Windows, Linux, and macOS**
+       Use `PyInstaller` or `Briefcase` to package the application for each platform.
        _Hint: Ensure all dependencies are included in the installer._
 
 ---
 
+## High Priority
 
-## 🔴 High Priority
+### Security
 
-### 🔧 Critical Logic & Performance
+- [x] **Fix arbitrary file read via `/media/image` and `/media/preview`**
+  - Both endpoints accepted any filesystem path on the query string with no
+    validation. They now require the path to already be a known indexed
+    image before serving it.
+
+### Critical Logic & Performance
 
 - [x] **The images are not retrieved from DB but from a list that is in-memory.**
 
@@ -65,9 +71,9 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ---
 
-## 🟡 Medium Priority
+## Medium Priority
 
-### 🎨 GUI / UX Improvements
+### GUI / UX Improvements
 
 - [x] **Improve overall GUI layout**
 
@@ -93,7 +99,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 - [ ] **Toast notifications or status bar**
   - For background events like face matching, DB updates, or errors.
 
-### 🧠 Functional Enhancements
+### Functional Enhancements
 
 - [ ] **Allow naming of recognized individuals**
 
@@ -107,10 +113,13 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
   - Display the similarity score on hover or click for each matched face.
 
-- [ ] **Add pagination or lazy-loading for large datasets**
-  - Prevent UI freezes and optimize memory usage.
+- [x] **Add pagination or lazy-loading for large datasets**
+  - The gallery grid is now virtualized with `react-virtuoso` (VirtuosoGrid),
+    so only cells near the viewport are mounted regardless of library size.
+    Generated previews are cached to disk instead of being re-rendered on
+    every request.
 
-### 🚀 Deployment & CI/CD
+### Deployment & CI/CD
 
 - [x] **Add GitHub Action to build & deploy desktop app**
   - Use [PyInstaller](https://pyinstaller.org/) or [Briefcase](https://beeware.org/project/projects/tools/briefcase/) to package as a desktop app.
@@ -119,9 +128,9 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ---
 
-## 🔵 Low Priority
+## Low Priority
 
-### 🧰 Code Quality & Architecture
+### Code Quality & Architecture
 
 - [ ] **Refactor to modular or MVC architecture**
 
@@ -137,7 +146,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
     - Face match threshold
     - Cache size
 
-### 🧪 Testing & DevOps
+### Testing & DevOps
 
 - [ ] **Add unit and regression test cases**
   - Implement comprehensive tests for the backend (FastAPI) and frontend (React/Zustand) to prevent regressions.
@@ -157,7 +166,7 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ---
 
-## ✨ Stretch Goals
+## Stretch Goals
 
 - [ ] **Deploy to mobile (Android/iOS)**
 
