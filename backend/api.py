@@ -167,36 +167,70 @@ async def search_images(q: str):
     results = controller().search(q)
     return [{"path": path, "score": float(score)} for path, score in results]
 
+def _resolve_indexed_path(path: str) -> str:
+    """
+    Resolve 'path' and confirm it's a real, symlink-free file already known to
+    the DB (i.e. it was found during a folder scan). Without this check, these
+    endpoints would let anyone who can reach the local API read arbitrary
+    files on disk by passing any path on the query string.
+    """
+    real_path = os.path.realpath(path)
+    if controller().db.get_image_id(real_path) is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return real_path
+
 # Endpoints to serve actual files
 @app.get("/media/image")
 async def serve_image(path: str):
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(path)
+    real_path = _resolve_indexed_path(path)
+    return FileResponse(real_path)
 
 import asyncio
+import hashlib
 from PIL import Image, ImageOps
-import io
 from fastapi.responses import Response
 
-def generate_preview(path: str, size: int):
+_PREVIEW_CACHE_DIR = None  # set on first use, once DATA_DIR is known
+
+def _preview_cache_dir() -> str:
+    global _PREVIEW_CACHE_DIR
+    if _PREVIEW_CACHE_DIR is None:
+        _PREVIEW_CACHE_DIR = os.path.join(os.environ["SNAPSORT_DATA_DIR"], "previews")
+        os.makedirs(_PREVIEW_CACHE_DIR, exist_ok=True)
+    return _PREVIEW_CACHE_DIR
+
+def generate_preview(path: str, size: int) -> str:
+    """Render a downscaled JPEG preview to a cache file and return its path.
+
+    Cache key includes mtime so an edited source image invalidates its cache
+    entry automatically. Written via temp file + atomic rename so concurrent
+    requests for the same uncached preview never race on a partial file.
+    """
+    mtime = os.path.getmtime(path)
+    key = hashlib.sha1(f"{path}:{mtime}:{size}".encode()).hexdigest()
+    cache_path = os.path.join(_preview_cache_dir(), f"{key}.jpg")
+    if os.path.exists(cache_path):
+        return cache_path
+
     with Image.open(path) as img:
         img = ImageOps.exif_transpose(img)
         img.thumbnail((size, size))
-        buf = io.BytesIO()
-        img.convert("RGB").save(buf, format="JPEG", quality=75)
-        return buf.getvalue()
+        tmp_path = f"{cache_path}.tmp-{os.getpid()}"
+        img.convert("RGB").save(tmp_path, format="JPEG", quality=75)
+        os.replace(tmp_path, cache_path)
+    return cache_path
 
 @app.get("/media/preview")
 async def serve_preview(path: str, size: int = 400):
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Image not found")
+    real_path = _resolve_indexed_path(path)
     try:
         # Run CPU-bound PIL operation in a separate thread to unblock the event loop
-        img_bytes = await asyncio.to_thread(generate_preview, path, size)
-        return Response(content=img_bytes, media_type="image/jpeg")
-    except Exception as e:
-        return FileResponse(path)
+        cache_path = await asyncio.to_thread(generate_preview, real_path, size)
+        # FileResponse derives ETag/Last-Modified from cache_path's own stat, so
+        # conditional GETs 304 correctly once the browser has fetched a preview.
+        return FileResponse(cache_path, media_type="image/jpeg")
+    except Exception:
+        return FileResponse(real_path)
 
 @app.get("/media/thumbnail/{face_id}")
 async def serve_thumbnail(face_id: int):
