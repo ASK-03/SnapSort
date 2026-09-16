@@ -2,9 +2,12 @@ from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import logging
 import os
 import sys
 import uvicorn
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Resolve runtime directories (passed by Electron or defaulting for dev)
@@ -169,15 +172,23 @@ async def search_images(q: str):
 
 def _resolve_indexed_path(path: str) -> str:
     """
-    Resolve 'path' and confirm it's a real, symlink-free file already known to
-    the DB (i.e. it was found during a folder scan). Without this check, these
-    endpoints would let anyone who can reach the local API read arbitrary
-    files on disk by passing any path on the query string.
+    Confirm 'path' is already known to the DB (i.e. it was found during a
+    folder scan) before serving it. Without this check, these endpoints would
+    let anyone who can reach the local API read arbitrary files on disk by
+    passing any path on the query string.
+
+    Paths are stored exactly as os.walk produced them (controller.py), which
+    may go through a symlink — so try the raw path first and only fall back
+    to a realpath comparison, rather than realpath-ing unconditionally and
+    missing every symlinked library.
     """
+    db = controller().db
+    if db.get_image_id(path) is not None:
+        return path
     real_path = os.path.realpath(path)
-    if controller().db.get_image_id(real_path) is None:
-        raise HTTPException(status_code=404, detail="Image not found")
-    return real_path
+    if db.get_image_id(real_path) is not None:
+        return real_path
+    raise HTTPException(status_code=404, detail="Image not found")
 
 # Endpoints to serve actual files
 @app.get("/media/image")
@@ -190,14 +201,8 @@ import hashlib
 from PIL import Image, ImageOps
 from fastapi.responses import Response
 
-_PREVIEW_CACHE_DIR = None  # set on first use, once DATA_DIR is known
-
-def _preview_cache_dir() -> str:
-    global _PREVIEW_CACHE_DIR
-    if _PREVIEW_CACHE_DIR is None:
-        _PREVIEW_CACHE_DIR = os.path.join(os.environ["SNAPSORT_DATA_DIR"], "previews")
-        os.makedirs(_PREVIEW_CACHE_DIR, exist_ok=True)
-    return _PREVIEW_CACHE_DIR
+_PREVIEW_CACHE_DIR = os.path.join(os.path.abspath(DATA_DIR), "previews")
+os.makedirs(_PREVIEW_CACHE_DIR, exist_ok=True)
 
 def generate_preview(path: str, size: int) -> str:
     """Render a downscaled JPEG preview to a cache file and return its path.
@@ -208,7 +213,7 @@ def generate_preview(path: str, size: int) -> str:
     """
     mtime = os.path.getmtime(path)
     key = hashlib.sha1(f"{path}:{mtime}:{size}".encode()).hexdigest()
-    cache_path = os.path.join(_preview_cache_dir(), f"{key}.jpg")
+    cache_path = os.path.join(_PREVIEW_CACHE_DIR, f"{key}.jpg")
     if os.path.exists(cache_path):
         return cache_path
 
@@ -229,8 +234,12 @@ async def serve_preview(path: str, size: int = 400):
         # FileResponse derives ETag/Last-Modified from cache_path's own stat, so
         # conditional GETs 304 correctly once the browser has fetched a preview.
         return FileResponse(cache_path, media_type="image/jpeg")
-    except Exception:
-        return FileResponse(real_path)
+    except Exception as e:
+        # Do not fall back to the full-resolution original here: a corrupt or
+        # unreadable source file would otherwise stream a multi-MB image into
+        # what's meant to be a small grid cell.
+        logger.error("Preview generation failed for %s: %s", real_path, e)
+        raise HTTPException(status_code=422, detail="Could not generate preview")
 
 @app.get("/media/thumbnail/{face_id}")
 async def serve_thumbnail(face_id: int):
