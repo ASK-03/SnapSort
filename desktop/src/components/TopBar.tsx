@@ -21,19 +21,12 @@ export const TopBar = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      // API call is handled in a useEffect in the main component
-    }
-  };
-
   return (
     <header className="h-20 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 bg-white dark:bg-[#0f1115]">
-      <form onSubmit={handleSearch} className="flex-1 max-w-2xl flex items-center gap-4">
+      <div className="flex-1 max-w-2xl flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
-          <input 
+          <input
             ref={inputRef}
             type="text"
             placeholder="Search for anything..."
@@ -45,7 +38,7 @@ export const TopBar = () => {
             {shortcutText}
           </div>
         </div>
-      </form>
+      </div>
 
       <button 
         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

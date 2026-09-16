@@ -170,16 +170,6 @@ class Controller:
         """
         return self.db.get_images_with_face(face_id)
 
-    def get_images_with_all_faces(self, image_path):
-        """
-        Find all face IDs in that image, then query for images that contain all of those face IDs.
-        """
-        face_ids = self.db.get_faces_in_image(image_path)
-        if not face_ids:
-            return []
-
-        return self.db.get_images_with_faces(face_ids)
-
     def merge_face_ids(self, primary_id, other_ids):
         """
         Merge every ID in other_ids into primary_id. All SQL logic is in db.merge_faces.

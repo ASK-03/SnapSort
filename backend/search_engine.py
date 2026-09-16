@@ -2,11 +2,11 @@
 Semantic search engine: CLIP text query → FAISS candidates → face-name reranking.
 
 Pipeline:
-  1. spaCy NER: extract PERSON entities from the query
+  1. Direct name resolution: match known face names against query words
+     (exact overlap or rapidfuzz typo tolerance)
   2. CLIP text encode: 512-d query embedding
   3. FAISS search: top-K candidates (image_ids + cosine scores)
   4. Face-name rerank:
-       - fuzzy-match entity names → face_ids (via rapidfuzz)
        - boost images containing matched faces: +0.30 (all), +0.15 (some)
        - penalise if names given but none found: -0.50
   5. Return ranked [(image_path, score), ...]
@@ -28,20 +28,7 @@ class SearchEngine:
         self.db             = db
         self.clip_index     = clip_index
         self.clip_processor = clip_processor
-        self._nlp           = None   # lazy spaCy load
-
     # ------------------------------------------------------------------
-    def _get_nlp(self):
-        if self._nlp is None:
-            import spacy
-            try:
-                self._nlp = spacy.load("en_core_web_sm")
-                logger.info("spaCy NER loaded")
-            except OSError:
-                logger.warning("spaCy model not found — NER disabled")
-                self._nlp = False
-        return self._nlp if self._nlp else None
-
     def _extract_and_resolve_names(self, query: str) -> dict[str, list[int]]:
         """
         Directly find known database names in the query string (bypassing spaCy NER).
