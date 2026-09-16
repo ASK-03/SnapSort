@@ -83,7 +83,13 @@ function App() {
 
       if (!useAppStore.getState().searchQuery.trim()) {
         const data = await getImages(0, 1000);
-        setImages(data);
+        const current = useAppStore.getState().images;
+        // Skip the update (and the resulting full-grid re-render) when nothing
+        // actually changed — loadImages() is polled every second while scanning.
+        const unchanged = current.length === data.length && current[current.length - 1] === data[data.length - 1];
+        if (!unchanged) {
+          setImages(data);
+        }
       }
     } catch (e) {
       console.error(e);

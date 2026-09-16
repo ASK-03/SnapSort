@@ -3,6 +3,7 @@ import { getPreviewUrl } from '../api';
 import { CheckCircle2, X, Grid2X2 } from 'lucide-react';
 
 import { useState } from 'react';
+import { VirtuosoGrid } from 'react-virtuoso';
 
 export const Gallery = () => {
   const { images, searchQuery, setSearchQuery, selectedImage, setSelectedImage, setShowRightSidebar, setLightboxImage } = useAppStore();
@@ -18,19 +19,22 @@ export const Gallery = () => {
     }
   };
 
+  // Static class names (not built from a runtime template) so Tailwind's
+  // JIT scanner picks them up at build time.
+  const GRID_COLS_CLASS: Record<number, string> = {
+    3: 'grid-cols-3',
+    4: 'grid-cols-4',
+    6: 'grid-cols-6',
+    8: 'grid-cols-8',
+  };
+
   const handleImageClick = (path: string) => {
     setSelectedImage(path);
     setShowRightSidebar(true);
   };
 
   const hasSearch = searchQuery.trim().length > 0;
-
   const numCols = getColCount();
-  const columns: string[][] = Array.from({ length: numCols }, () => []);
-
-  images.forEach((path, i) => {
-    columns[i % numCols].push(path);
-  });
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 dark:bg-[#0f1115] h-full overflow-hidden">
@@ -63,46 +67,47 @@ export const Gallery = () => {
         )}
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 px-8 pb-4 overflow-y-auto">
+      {/* Grid — VirtuosoGrid only mounts DOM nodes for cells near the viewport,
+          so scroll performance stays flat regardless of library size. */}
+      <div className="flex-1 px-8 pb-4 overflow-hidden">
         {images.length === 0 ? (
           <div className="h-full flex items-center justify-center text-slate-500 flex-col gap-4">
             <Grid2X2 size={48} className="opacity-20" />
             <p>No images to display</p>
           </div>
         ) : (
-          <div className="flex gap-4 pt-8">
-            {columns.map((colImages, colIndex) => (
-              <div key={colIndex} className="flex flex-col gap-4 flex-1">
-                {colImages.map((path) => {
-                  const isSelected = selectedImage === path;
-                  return (
-                    <div
-                      key={path}
-                      className={`rounded-xl overflow-hidden cursor-pointer relative group border-2 border-transparent hover:border-slate-400 dark:hover:border-slate-600 transition-all bg-slate-200 dark:bg-black/20 ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-[#0f1115]' : ''}`}
-                      onClick={() => handleImageClick(path)}
-                      onDoubleClick={() => setLightboxImage(path)}
-                    >
-                      <img
-                        src={getPreviewUrl(path)}
-                        alt=""
-                        loading="lazy"
-                        className="w-full h-auto object-cover"
-                        style={{ imageOrientation: 'from-image' } as any}
-                      />
+          <VirtuosoGrid
+            style={{ height: '100%' }}
+            totalCount={images.length}
+            listClassName={`grid gap-4 pt-8 ${GRID_COLS_CLASS[numCols]}`}
+            itemContent={(index) => {
+              const path = images[index];
+              const isSelected = selectedImage === path;
+              return (
+                <div
+                  className={`rounded-xl overflow-hidden cursor-pointer relative group border-2 border-transparent hover:border-slate-400 dark:hover:border-slate-600 transition-all bg-slate-200 dark:bg-black/20 aspect-square ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-[#0f1115]' : ''}`}
+                  onClick={() => handleImageClick(path)}
+                  onDoubleClick={() => setLightboxImage(path)}
+                >
+                  <img
+                    src={getPreviewUrl(path)}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                    style={{ imageOrientation: 'from-image' } as any}
+                  />
 
-                      {isSelected && (
-                        <div className="absolute top-2 right-2 text-blue-500 bg-white rounded-full">
-                          <CheckCircle2 size={20} className="fill-current text-blue-500 stroke-white" />
-                        </div>
-                      )}
-                      <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-blue-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 text-blue-500 bg-white rounded-full">
+                      <CheckCircle2 size={20} className="fill-current text-blue-500 stroke-white" />
                     </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
+                  )}
+                  <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-blue-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                </div>
+              );
+            }}
+          />
         )}
       </div>
 
