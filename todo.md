@@ -39,7 +39,7 @@ _(none open)_
   - Display the similarity score on hover or click for each matched face.
 
 - [ ] **Add support for videos**
-  - Extend scanning and indexing logic to extract frames from videos for facial recognition and semantic search.
+  - Extend scanning and indexing logic to extract frames from videos for facial recognition and semantic search. Sample keyframes at a fixed interval and reuse the existing face/CLIP pipeline; store a frame timestamp per detection.
 
 - [ ] **Support more image formats**
   - Scanning is currently hardcoded to `.jpg`/`.jpeg`/`.png` (`controller.py::scan_folder`). Extend to HEIC, WebP, TIFF, etc.
@@ -64,16 +64,30 @@ _(none open)_
     - Face match threshold
     - Cache size
 
+### Community & Governance
+
+- [ ] **Add CONTRIBUTING.md**
+  - Document setup, branch/PR conventions, and issue-labeling for new contributors.
+
+- [ ] **Add CODE_OF_CONDUCT.md**
+  - Standard contributor covenant for the repository.
+
 ### Testing & DevOps
 
 - [ ] **Add unit and regression test cases**
-  - Implement comprehensive tests for the backend (FastAPI) and frontend (React/Zustand) to prevent regressions.
+  - Start with a regression test for the path-validation fix (`a24e07b`), then wire `pytest` into CI and grow coverage incrementally for backend (FastAPI) and frontend (React/Zustand).
 
 - [ ] **Set up GitHub Actions for code quality**
   - Run `flake8`, `black`, and `pytest` automatically on push.
 
 - [ ] **Maintain dependencies and requirements**
   - Keep `requirements.txt` or `pyproject.toml` up to date.
+
+- [ ] **Consolidate Python environments**
+  - Replace the scattered `env/`, `.venv/`, `backend/.venv/` with a single `pyproject.toml` and one documented setup command.
+
+- [ ] **Clean up repository history/objects**
+  - Run `git gc` to compact loose objects; repo currently holds ~250MB of unpacked git data.
 
 ---
 

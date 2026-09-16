@@ -3,7 +3,6 @@ import threading
 import time
 import os
 import logging
-import warnings
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -51,41 +50,6 @@ class Database:
                 c.execute("ALTER TABLE faces ADD COLUMN name TEXT DEFAULT NULL")
             except Exception:
                 pass  # column already exists
-            self.conn.commit()
-
-    def insert_occurrence(self, image_path, face_id, box):
-        """
-        Insert a face occurrence (Deprecated: use insert_occurrences_batch instead).
-        """
-        warnings.warn("insert_occurrence is deprecated, use insert_occurrences_batch instead", DeprecationWarning, stacklevel=2)
-        with self.lock:
-            c = self.conn.cursor()
-            # 1) images table
-            c.execute(
-                "INSERT OR IGNORE INTO images(path, modified) VALUES(?, ?)",
-                (image_path, os.path.getmtime(image_path)),
-            )
-            c.execute("SELECT id FROM images WHERE path = ?", (image_path,))
-            img_id = c.fetchone()[0]
-
-            # 2) faces table
-            c.execute(
-                "INSERT OR IGNORE INTO faces(id, last_seen) VALUES(?, ?)",
-                (face_id, time.time()),
-            )
-            # Always update last_seen timestamp
-            c.execute(
-                "UPDATE faces SET last_seen = ? WHERE id = ?",
-                (time.time(), face_id),
-            )
-
-            # 3) occurrences table
-            x1, y1, x2, y2 = box
-            c.execute(
-                "INSERT INTO occurrences(image_id, face_id, x1, y1, x2, y2) "
-                "VALUES(?, ?, ?, ?, ?, ?)",
-                (img_id, face_id, x1, y1, x2, y2),
-            )
             self.conn.commit()
 
     def insert_occurrences_batch(self, items: list[tuple[str, int, tuple]]):
@@ -199,13 +163,6 @@ class Database:
             c.execute("SELECT id, name FROM faces WHERE name IS NOT NULL AND name != ''")
             return c.fetchall()
 
-    def get_all_face_ids(self) -> list[int]:
-        """Return all face IDs (ordered by id) for the People view."""
-        with self.lock:
-            c = self.conn.cursor()
-            c.execute("SELECT DISTINCT id FROM faces ORDER BY id")
-            return [r[0] for r in c.fetchall()]
-
     def get_all_faces_with_counts(self) -> list[dict]:
         """Return all faces with their names and occurrence counts."""
         with self.lock:
@@ -257,33 +214,6 @@ class Database:
                 "WHERE face_id = ?",
                 (face_id,),
             )
-            rows = c.fetchall()
-            return [r[0] for r in rows]
-
-    def get_images_with_faces(self, face_ids):
-        """
-        Return all image paths containing *all* of the face_ids in the given list.
-        Uses GROUP BY ... HAVING COUNT(DISTINCT face_id) = len(face_ids).
-        """
-        if not face_ids:
-            return []
-
-        placeholders = ",".join("?" for _ in face_ids)
-
-        query = f"""
-            SELECT images.path
-            FROM occurrences
-            JOIN images ON occurrences.image_id = images.id
-            WHERE face_id IN ({placeholders})
-            GROUP BY images.id
-            HAVING COUNT(DISTINCT face_id) > 1
-        """
-
-        params = face_ids
-
-        with self.lock:
-            c = self.conn.cursor()
-            c.execute(query, params)
             rows = c.fetchall()
             return [r[0] for r in rows]
 
@@ -376,60 +306,6 @@ class Database:
         except Exception as e:
             logger.error("Failed to generate thumbnail for face %d: %s", face_id, e)
             return None
-    def get_face_thumbnail_from_image(self, face_id, image_path):
-        """
-        Return the path to an 80x80 thumbnail PNG for face_id *specifically* from image_path.
-        This prevents false merges from showing the wrong person's face.
-        """
-        import hashlib
-        thumb_dir = os.path.join("resources", "thumbnails")
-        os.makedirs(thumb_dir, exist_ok=True)
-        # Unique name per face occurrence in a specific image
-        path_hash = hashlib.md5(image_path.encode()).hexdigest()
-        path = os.path.join(thumb_dir, f"face_{face_id}_{path_hash}.png")
-
-        if os.path.exists(path):
-            return path
-
-        with self.lock:
-            c = self.conn.cursor()
-            c.execute(
-                "SELECT x1, y1, x2, y2 "
-                "FROM occurrences "
-                "JOIN images ON occurrences.image_id = images.id "
-                "WHERE face_id = ? AND images.path = ? "
-                "LIMIT 1",
-                (face_id, image_path),
-            )
-            row = c.fetchone()
-            if not row:
-                return None
-            x1, y1, x2, y2 = row
-
-        try:
-            from PIL import ImageOps
-            img = Image.open(image_path).convert("RGB")
-            img = ImageOps.exif_transpose(img)
-            w, h = img.size
-            face_w = x2 - x1
-            face_h = y2 - y1
-            
-            # Pad by 30% of face width/height on each side
-            pad_w = int(face_w * 0.3)
-            pad_h = int(face_h * 0.3)
-            
-            nx1 = max(0, x1 - pad_w)
-            ny1 = max(0, y1 - int(pad_h * 1.5))
-            nx2 = min(w, x2 + pad_w)
-            ny2 = min(h, y2 + pad_h)
-            
-            crop = img.crop((nx1, ny1, nx2, ny2)).resize((80, 80))
-            crop.save(path)
-            return path
-        except Exception as e:
-            logger.error("Failed to generate specific thumbnail for face %d in %s: %s", face_id, image_path, e)
-            return None
-
     def merge_faces(self, primary_id, other_ids):
         """
         Merge every ID in other_ids into primary_id:
