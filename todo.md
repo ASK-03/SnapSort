@@ -6,8 +6,18 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ## High Priority
 
-_(none open)_
+- [ ] **Fix selection ring clipped on top-row gallery images**
+  - `Gallery.tsx`: react-virtuoso sets `style="padding-top: 0px"` inline on its `virtuoso-item-list` div, overriding the `pt-8` Tailwind class — row 0 sits flush against the scroller's clipped top edge, so the `ring-offset-2` selection ring gets cut off. Fix: use an inset ring (`ring-inset`) instead of `ring-offset`, so the indicator draws inside the card and isn't clipped.
 
+- [ ] **Progress bar shows incorrect/stale progress**
+  - Bottom progress bar does not reflect real scan progress.
+
+- [ ] **Browse by processed folder**
+  - Sidebar view listing scanned folders; clicking one shows only its images; show per-folder processed percentage.
+  
+- [ ] **Add re-process button**
+  - To re-process images that do not detect faces but have them; user can re-run the detection process.
+  
 ---
 
 ## Medium Priority
@@ -33,6 +43,12 @@ _(none open)_
 - [ ] **Toast notifications or status bar**
   - For background events like face matching, DB updates, or errors.
 
+- [ ] **Show face name in search filter instead of `face:id`**
+  - `TopBar.tsx` displays the raw `face:<id>` query; show the face's name when set, falling back to `face:<id>`.
+
+- [ ] **Allow reassigning a single wrong face detection**
+  - Current rename/merge (`Faces.tsx`, `ImageDetails.tsx`) only relabels or merges whole clusters. Need to move one wrongly-clustered occurrence to the correct person: new backend endpoint to reassign `occurrences.face_id` for a single occurrence, plus UI to pick the target person.
+
 ### Functional Enhancements
 
 - [ ] **Show face match confidence score**
@@ -40,9 +56,6 @@ _(none open)_
 
 - [ ] **Add support for videos**
   - Extend scanning and indexing logic to extract frames from videos for facial recognition and semantic search. Sample keyframes at a fixed interval and reuse the existing face/CLIP pipeline; store a frame timestamp per detection.
-
-- [ ] **Support more image formats**
-  - Scanning is currently hardcoded to `.jpg`/`.jpeg`/`.png` (`controller.py::scan_folder`). Extend to HEIC, WebP, TIFF, etc.
 
 ---
 
@@ -118,5 +131,6 @@ _(none open)_
 - [x] Add search functionality
 - [x] Add pagination / lazy-loading for large datasets (virtualized gallery grid + disk-cached previews)
 - [x] GitHub Action to build & deploy desktop app
+- [x] Support more image formats (WebP, BMP, TIFF, GIF, HEIC/HEIF)
 
 ---

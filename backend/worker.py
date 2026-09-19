@@ -2,7 +2,10 @@ import logging
 from face_processing import init_face_model, detect_and_embed
 from clip_processor import CLIPProcessor
 from PIL import Image, ImageOps
+import pillow_heif
 import numpy as np
+
+pillow_heif.register_heif_opener()  # lets Image.open() decode .heic/.heif in this worker process
 
 logger = logging.getLogger(__name__)
 

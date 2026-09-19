@@ -4,6 +4,7 @@ opencv-python-headless
 onnxruntime
 numpy
 pillow
+pillow-heif
 faiss-cpu
 transformers
 python-multipart
