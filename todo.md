@@ -17,6 +17,9 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
   
 - [ ] **Add re-process button**
   - To re-process images that do not detect faces but have them; user can re-run the detection process.
+
+- [ ] **Better update mechanism**
+  - Current update = uninstall old app, install new one; add in-place auto-update via `electron-updater` against GitHub Releases.
   
 ---
 
@@ -32,22 +35,27 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
     - Rename or tag
     - Mark as favorite
 
-- [ ] **Add loading/progress indicators**
-
-  - Show when thumbnails or face data are being generated in the background.
-
 - [ ] **Enable image zoom/preview**
 
   - Click on image to view full-screen or high-res version.
 
-- [ ] **Toast notifications or status bar**
-  - For background events like face matching, DB updates, or errors.
+- [ ] **Polish image viewer with animations/transitions**
+  - Smooth open/close, navigation, and zoom transitions; current viewer feels rough/abrupt.
+
+- [ ] **Better filters in search bar**
 
 - [ ] **Show face name in search filter instead of `face:id`**
   - `TopBar.tsx` displays the raw `face:<id>` query; show the face's name when set, falling back to `face:<id>`.
 
+- [ ] **Support alias names for face search**
+  - Let a face have one primary name plus alternate names/nicknames, all matchable in search.
+
 - [ ] **Allow reassigning a single wrong face detection**
   - Current rename/merge (`Faces.tsx`, `ImageDetails.tsx`) only relabels or merges whole clusters. Need to move one wrongly-clustered occurrence to the correct person: new backend endpoint to reassign `occurrences.face_id` for a single occurrence, plus UI to pick the target person.
+
+- [ ] **Delete a stray/unknown face from the Faces window**
+  - Let user remove a false-positive face detection (not a real face, or non-target person) directly from `Faces.tsx`.
+
 
 ### Functional Enhancements
 
