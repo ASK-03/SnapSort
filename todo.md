@@ -120,6 +120,40 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 - [ ] **Cloud sync support**
   - Optional: Sync metadata or processed DB to a cloud backend for portability.
 
+- [ ] **OCR pipeline for screenshots**
+  - Extract text from screenshots to help search/manage them.
+
+---
+
+## UI Redesign
+
+Search-first, amber/graphite (+ light mode), 250ms Apple-style motion. Mockup: https://claude.ai/artifact/LiyjoSYmqDvsZt5bNZK99F
+
+### Frontend
+
+- [ ] Design tokens: dark + light palette as CSS vars, Tailwind `accent`/`apple`-easing/`250` duration, Instrument Sans
+- [ ] Store: `viewerPanel`, `contextMenu`, `searchFaceFilter`, `viewerZoom`
+- [ ] Sidebar: restyle, Folders section (client-derived from image paths)
+- [ ] Search chip: show face name instead of raw `face:<id>`
+- [ ] Gallery: restyle, `ring-inset` selection fix, right-click context menu, grid→viewer morph transition
+- [ ] New `ContextMenu.tsx` (Open wired; Reprocess/Rename/Favorite/Delete shown disabled)
+- [ ] Lightbox: default state (restyle, face-name strip, nav crossfade) + info/edit panel states (no nav arrows, image recenter transition)
+- [ ] New `InfoPanel.tsx` (details + people, extracted from ImageDetails)
+- [ ] New `EditPanel.tsx` (crop/rotate/adjust/filters rail — UI/preview only, no persistence)
+- [ ] Viewer zoom control (−/+/slider, scale transition)
+- [ ] Faces.tsx restyle to new tokens
+
+### Backend
+
+- [ ] `folders` table + per-folder scan progress endpoint
+- [ ] `occurrences` primary key + reassign-single-occurrence endpoint
+- [ ] Delete-stray-face endpoint
+- [ ] Face aliases table (multiple names per face)
+- [ ] Persist face-match confidence score
+- [ ] Image delete / favorite / rename endpoints
+- [ ] Real EXIF-based dimensions/date (replace mocked metadata)
+- [ ] Image edit persistence (crop/rotate/adjust save)
+
 ---
 
 ## Completed
