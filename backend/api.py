@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -208,7 +208,6 @@ async def serve_image(path: str):
 import asyncio
 import hashlib
 from PIL import Image, ImageOps
-from fastapi.responses import Response
 
 _PREVIEW_CACHE_DIR = os.path.join(os.path.abspath(DATA_DIR), "previews")
 os.makedirs(_PREVIEW_CACHE_DIR, exist_ok=True)
