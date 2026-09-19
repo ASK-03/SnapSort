@@ -9,9 +9,9 @@ semantic image embedding (CLIP).
 
 Usage:
     1. Ensure you have the required Python dependencies installed:
-       `pip install -r requirements.txt`
+       `uv sync`
     2. Run the script and pass the directory of images you want to test:
-       `python scripts/benchmark.py /path/to/your/images`
+       `uv run python scripts/benchmark.py /path/to/your/images`
 
 If no directory is provided, it will fallback to the current directory.
 """

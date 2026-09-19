@@ -10,7 +10,7 @@ SnapSort uses a hybrid architecture:
 
 ## Setup commands
 
-- Backend deps: `pip install -r requirements.txt`
+- Backend deps: `uv sync` (installs the locked versions from `uv.lock` into `.venv`)
 - Frontend deps: `cd desktop && npm install`
 - Start dev: `cd desktop && npm run dev` (Starts Vite, which starts Electron, which spawns the FastAPI backend automatically)
 - Build: `cd desktop && npm run build` (Builds Electron app with electron-builder)
