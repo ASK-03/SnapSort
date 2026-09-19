@@ -19,17 +19,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
       - name: Install Python dependencies & PyInstaller
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
+          uv sync --group dev
           cd backend
-          pyinstaller api.py -F --noconfirm --collect-all uvicorn --collect-all fastapi --collect-all onnxruntime --collect-all rapidfuzz --name api
+          uv run pyinstaller api.py -F --noconfirm --collect-all uvicorn --collect-all fastapi --collect-all onnxruntime --collect-all rapidfuzz --name api
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

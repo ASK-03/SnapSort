@@ -88,15 +88,15 @@ SnapSort is divided into an Electron frontend (`desktop/`) and a Python backend 
 - Python ≥ 3.10
 
 ### 1. Backend Setup
-Create a virtual environment and install dependencies:
+Install [uv](https://docs.astral.sh/uv/), then install dependencies:
 ```bash
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh   # skip if uv is already installed
+uv sync
 ```
+This creates `.venv` and installs the exact locked dependency versions. Prefix backend commands with `uv run` (e.g. `uv run python scripts/download_models.py`), or `source .venv/bin/activate` once.
 Download the required AI models:
 ```bash
-python scripts/download_models.py
+uv run python scripts/download_models.py
 ```
 
 ### 2. Frontend Setup

@@ -101,11 +101,11 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 - [ ] **Set up GitHub Actions for code quality**
   - Run `flake8`, `black`, and `pytest` automatically on push.
 
-- [ ] **Maintain dependencies and requirements**
-  - Keep `requirements.txt` or `pyproject.toml` up to date.
+- [x] **Maintain dependencies and requirements**
+  - Deps now tracked in `pyproject.toml`.
 
-- [ ] **Consolidate Python environments**
-  - Replace the scattered `env/`, `.venv/`, `backend/.venv/` with a single `pyproject.toml` and one documented setup command.
+- [x] **Consolidate Python environments**
+  - Replaced scattered `env/`, `.venv/`, `backend/.venv/` with one `pyproject.toml` and documented setup command.
 
 - [ ] **Clean up repository history/objects**
   - Run `git gc` to compact loose objects; repo currently holds ~250MB of unpacked git data.

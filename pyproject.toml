@@ -1,0 +1,26 @@
+[project]
+name = "snapsort"
+version = "0.1.0"
+description = "Free, open-source AI-powered local photo manager"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "opencv-python-headless",
+    "onnxruntime",
+    "numpy",
+    "pillow",
+    "pillow-heif",
+    "faiss-cpu",
+    "transformers",
+    "python-multipart",
+    "rapidfuzz",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller",
+]
+
+[tool.uv]
+package = false
