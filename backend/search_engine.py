@@ -13,7 +13,7 @@ Pipeline:
 """
 import logging
 import numpy as np
-from rapidfuzz import process as fuzz_process, fuzz
+from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
 

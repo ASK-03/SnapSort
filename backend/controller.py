@@ -28,7 +28,6 @@ class Controller:
         self.idx        = indexer.FaissIndex(os.path.join(self.data_dir, "faces.index"))
         self.clip_index = CLIPIndex(os.path.join(self.data_dir, "clip.index"))
         self.pool = Pool(processes=self.num_workers, initializer=worker._worker_init)
-        self.image_to_faces = {}
 
         # Search engine (uses main-process CLIP processor for query encoding)
         self._clip_proc   = CLIPProcessor()
@@ -144,7 +143,6 @@ class Controller:
         if items:
             self.db.insert_occurrences_batch(items)
 
-        self.image_to_faces[img_path] = face_ids
         logger.debug("Indexed %s: faces=%s", img_path, face_ids)
 
         # Store CLIP embedding keyed by DB image_id
