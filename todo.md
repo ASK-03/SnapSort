@@ -57,9 +57,6 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 - [ ] **Add support for videos**
   - Extend scanning and indexing logic to extract frames from videos for facial recognition and semantic search. Sample keyframes at a fixed interval and reuse the existing face/CLIP pipeline; store a frame timestamp per detection.
 
-- [ ] **Support more image formats**
-  - Scanning is currently hardcoded to `.jpg`/`.jpeg`/`.png` (`controller.py::scan_folder`). Extend to HEIC, WebP, TIFF, etc.
-
 ---
 
 ## Low Priority
@@ -134,5 +131,6 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 - [x] Add search functionality
 - [x] Add pagination / lazy-loading for large datasets (virtualized gallery grid + disk-cached previews)
 - [x] GitHub Action to build & deploy desktop app
+- [x] Support more image formats (WebP, BMP, TIFF, GIF, HEIC/HEIF)
 
 ---

@@ -6,6 +6,9 @@ import logging
 import os
 import sys
 import uvicorn
+import pillow_heif
+
+pillow_heif.register_heif_opener()  # lets Image.open() decode .heic/.heif in the main process
 
 logger = logging.getLogger(__name__)
 
@@ -190,10 +193,16 @@ def _resolve_indexed_path(path: str) -> str:
         return real_path
     raise HTTPException(status_code=404, detail="Image not found")
 
+# Formats Chromium's <img> can't decode natively — serve a JPEG transcode instead of raw bytes.
+_BROWSER_UNSAFE_EXTS = (".heic", ".heif", ".tif", ".tiff")
+
 # Endpoints to serve actual files
 @app.get("/media/image")
 async def serve_image(path: str):
     real_path = _resolve_indexed_path(path)
+    if real_path.lower().endswith(_BROWSER_UNSAFE_EXTS):
+        cache_path = await asyncio.to_thread(generate_preview, real_path, 4096)
+        return FileResponse(cache_path, media_type="image/jpeg")
     return FileResponse(real_path)
 
 import asyncio

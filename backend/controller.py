@@ -40,21 +40,27 @@ class Controller:
         self.image_queue = deque()
         self._save_counter = 0
 
+    # Formats Pillow (+ pillow-heif) can decode via Image.open in worker.py/clip_processor.py/db.py
+    SUPPORTED_EXTENSIONS = (
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp",
+        ".tif", ".tiff", ".gif", ".heic", ".heif",
+    )
+
     def scan_folder(self, folder_path):
         """
-        Walk 'folder_path' recursively, collect all .jpg/.png/.jpeg files.
-        Queue new images (not yet in DB) for processing.
+        Walk 'folder_path' recursively, collect all supported image files
+        (see SUPPORTED_EXTENSIONS). Queue new images (not yet in DB) for processing.
         """
         if self.is_scanning:
             return {"error": "Already scanning"}
-            
+
         logger.info("Scanning folder: %s", folder_path)
         self.is_scanning = True
-        
+
         all_image_paths = []
         for root, _, files in os.walk(folder_path):
             for fn in files:
-                if fn.lower().endswith((".jpg", ".png", ".jpeg")):
+                if fn.lower().endswith(self.SUPPORTED_EXTENSIONS):
                     all_image_paths.append(os.path.join(root, fn))
 
         # Filter out already-processed images
