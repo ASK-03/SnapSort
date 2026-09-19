@@ -28,6 +28,21 @@ interface AppState {
 
   stats: { photos: number; faces: number; people: number };
   setStats: (stats: { photos: number; faces: number; people: number }) => void;
+
+  viewerPanel: 'none' | 'info' | 'edit';
+  setViewerPanel: (panel: 'none' | 'info' | 'edit') => void;
+
+  contextMenu: { x: number; y: number; imagePath: string } | null;
+  setContextMenu: (menu: { x: number; y: number; imagePath: string } | null) => void;
+
+  searchFaceFilter: { id: number; name: string } | null;
+  setSearchFaceFilter: (filter: { id: number; name: string } | null) => void;
+
+  viewerZoom: number;
+  setViewerZoom: (zoom: number) => void;
+
+  folderFilter: string | null;
+  setFolderFilter: (folder: string | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -56,4 +71,19 @@ export const useAppStore = create<AppState>((set) => ({
 
   stats: { photos: 0, faces: 0, people: 0 },
   setStats: (stats) => set({ stats }),
+
+  viewerPanel: 'none',
+  setViewerPanel: (viewerPanel) => set({ viewerPanel }),
+
+  contextMenu: null,
+  setContextMenu: (contextMenu) => set({ contextMenu }),
+
+  searchFaceFilter: null,
+  setSearchFaceFilter: (searchFaceFilter) => set({ searchFaceFilter }),
+
+  viewerZoom: 1,
+  setViewerZoom: (viewerZoom) => set({ viewerZoom }),
+
+  folderFilter: null,
+  setFolderFilter: (folderFilter) => set({ folderFilter }),
 }));

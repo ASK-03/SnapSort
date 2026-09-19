@@ -1,16 +1,31 @@
-
+import { useMemo } from 'react';
 import { useAppStore } from '../store';
 import { scanFolder } from '../api';
-import { 
-  Image as ImageIcon, 
-  UserCircle, 
-  Users, 
+import {
+  Image as ImageIcon,
+  UserCircle,
+  Users,
   Settings,
-  Info
+  Info,
+  Folder,
 } from 'lucide-react';
 
+const dirname = (path: string) => {
+  const parts = path.split(/[\\/]/);
+  parts.pop();
+  return parts.join('/') || '/';
+};
+
+const basename = (path: string) => {
+  const parts = path.split(/[\\/]/);
+  return parts[parts.length - 1] || path;
+};
+
 export const Sidebar = () => {
-  const { viewMode, setViewMode, isScanning, setIsScanning, progress, stats } = useAppStore();
+  const {
+    viewMode, setViewMode, isScanning, setIsScanning, progress, stats,
+    images, folderFilter, setFolderFilter, setSearchQuery, setSearchFaceFilter,
+  } = useAppStore();
 
   const handleSelectFolder = async () => {
     // @ts-ignore
@@ -19,6 +34,24 @@ export const Sidebar = () => {
       setIsScanning(true);
       await scanFolder(folderPath);
     }
+  };
+
+  const folders = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const path of images) {
+      const dir = dirname(path);
+      counts.set(dir, (counts.get(dir) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [images]);
+
+  const openFolder = (dir: string) => {
+    setSearchQuery('');
+    setSearchFaceFilter(null);
+    setFolderFilter(folderFilter === dir ? null : dir);
+    setViewMode('photos');
   };
 
   const navItems = [
@@ -35,40 +68,40 @@ export const Sidebar = () => {
   const percent = progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
 
   return (
-    <aside className="w-64 bg-slate-50 dark:bg-[#0f1115] border-r border-slate-200 dark:border-slate-800 flex flex-col h-full text-sm">
+    <aside className="w-64 bg-surface border-r border-border flex flex-col h-full text-sm">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3">
         <img src="./snapsort-logo.png" alt="SnapSort Logo" className="w-8 h-8 rounded-lg" />
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">SnapSort</h1>
+        <h1 className="text-xl font-semibold text-text">SnapSort</h1>
       </div>
 
       <div className="px-4 mb-6">
-        <button 
+        <button
           onClick={handleSelectFolder}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg transition-colors font-medium"
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:brightness-110 text-bg py-2.5 rounded-lg transition-all duration-250 ease-apple font-medium"
         >
           Select Folder
         </button>
       </div>
 
       {/* Main Nav */}
-      <div className="px-3 space-y-1 flex-1">
+      <div className="px-3 space-y-1 flex-1 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = viewMode === item.id;
+          const isActive = viewMode === item.id && !folderFilter;
           return (
             <button
               key={item.id}
-              onClick={() => setViewMode(item.id as any)}
-              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors ${
-                isActive 
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800/50'
+              onClick={() => { setFolderFilter(null); setViewMode(item.id as any); }}
+              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors duration-250 ease-apple ${
+                isActive
+                  ? 'bg-accent/15 text-accent'
+                  : 'text-text-dim hover:text-text hover:bg-surface-hi'
               }`}
             >
-              <item.icon size={18} className={isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'} />
+              <item.icon size={18} className={isActive ? 'text-accent' : 'text-text-mute'} />
               <span className="flex-1 text-left font-medium">{item.label}</span>
               {item.count !== undefined && (
-                <span className={`text-xs ${isActive ? 'text-blue-200' : 'text-slate-400 dark:text-slate-600 font-medium'}`}>
+                <span className={`text-xs font-medium ${isActive ? 'text-accent' : 'text-text-mute'}`}>
                   {item.count.toLocaleString()}
                 </span>
               )}
@@ -76,7 +109,32 @@ export const Sidebar = () => {
           );
         })}
 
-        <div className="my-6 border-t border-slate-200 dark:border-slate-800 mx-3"></div>
+        {folders.length > 0 && (
+          <>
+            <div className="pt-5 pb-2 px-4 text-[11px] font-semibold tracking-wide text-text-mute">
+              FOLDERS
+            </div>
+            {folders.map(([dir, count]) => {
+              const isActive = folderFilter === dir;
+              return (
+                <button
+                  key={dir}
+                  onClick={() => openFolder(dir)}
+                  className={`flex items-center gap-2.5 w-full px-4 py-2 rounded-lg transition-colors duration-250 ease-apple ${
+                    isActive ? 'bg-accent/15 text-accent' : 'text-text-dim hover:text-text hover:bg-surface-hi'
+                  }`}
+                  title={dir}
+                >
+                  <Folder size={14} className={isActive ? 'text-accent' : 'text-text-mute'} />
+                  <span className="flex-1 text-left truncate text-[13px]">{basename(dir)}</span>
+                  <span className="text-[11px] text-text-mute">{count}</span>
+                </button>
+              );
+            })}
+          </>
+        )}
+
+        <div className="my-6 border-t border-border mx-3"></div>
 
         {bottomNavItems.map((item) => {
           const isActive = viewMode === item.id;
@@ -84,10 +142,10 @@ export const Sidebar = () => {
             <button
               key={item.id}
               onClick={() => setViewMode(item.id as any)}
-              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors ${
-                isActive 
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800/50'
+              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors duration-250 ease-apple ${
+                isActive
+                  ? 'bg-accent/15 text-accent'
+                  : 'text-text-dim hover:text-text hover:bg-surface-hi'
               }`}
             >
               <item.icon size={18} />
@@ -98,20 +156,20 @@ export const Sidebar = () => {
       </div>
 
       {/* Progress / Status */}
-      <div className="p-4 m-4 bg-white dark:bg-[#1a1d24] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none">
+      <div className="p-4 m-4 bg-surface-hi rounded-xl border border-border">
         <div className="flex items-center gap-3 mb-3">
-          <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : 'bg-slate-400 dark:bg-slate-500'}`}></div>
-          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-            {isScanning ? 'Scanning...' : 'Idle'}
+          <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-accent shadow-[0_0_8px_rgba(217,162,75,0.5)] animate-pulse' : 'bg-success'}`}></div>
+          <span className="text-xs font-medium text-text-dim">
+            {isScanning ? 'Scanning…' : 'Idle'}
           </span>
         </div>
-        <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mb-2 overflow-hidden">
-          <div 
-            className="bg-blue-500 h-1.5 rounded-full transition-all duration-300" 
+        <div className="w-full bg-border rounded-full h-1.5 mb-2 overflow-hidden">
+          <div
+            className="bg-accent h-1.5 rounded-full transition-all duration-250 ease-apple"
             style={{ width: `${percent}%` }}
           ></div>
         </div>
-        <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-500 font-medium">
+        <div className="flex justify-between text-[10px] text-text-mute font-medium">
           <span>{progress.processed.toLocaleString()} / {progress.total.toLocaleString()}</span>
           <span>{percent}%</span>
         </div>

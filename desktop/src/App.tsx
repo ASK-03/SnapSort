@@ -8,11 +8,12 @@ import { Gallery } from './components/Gallery';
 import { Faces } from './components/Faces';
 import { ImageDetails } from './components/ImageDetails';
 import { Lightbox } from './components/Lightbox';
+import { ContextMenu } from './components/ContextMenu';
 import { Settings } from './components/Settings';
 import { About } from './components/About';
 
 function App() {
-  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, setStats, viewMode, setViewMode, theme } = useAppStore();
+  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, searchFaceFilter, setStats, viewMode, setViewMode, theme } = useAppStore();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -50,38 +51,42 @@ function App() {
 
   useEffect(() => {
     const handleSearch = async () => {
+      if (searchFaceFilter) {
+        try {
+          const results = await getImagesForFace(searchFaceFilter.id);
+          setImages(results);
+          setViewMode('photos');
+        } catch (e) {
+          console.error(e);
+        }
+        return;
+      }
+
       if (!searchQuery.trim()) {
         loadImages();
         return;
       }
       try {
-        if (searchQuery.startsWith('face:')) {
-          const faceId = parseInt(searchQuery.split(':')[1]);
-          if (!isNaN(faceId)) {
-            const results = await getImagesForFace(faceId);
-            setImages(results);
-          }
-        } else {
-          const results = await getSearch(searchQuery);
-          setImages(results.map((r: any) => r.path));
-        }
+        const results = await getSearch(searchQuery);
+        setImages(results.map((r: any) => r.path));
         setViewMode('photos');
       } catch (e) {
         console.error(e);
       }
     };
-    
+
     // Add debounce here in a real app, for now just call on change
     const timeout = setTimeout(handleSearch, 300);
     return () => clearTimeout(timeout);
-  }, [searchQuery]);
+  }, [searchQuery, searchFaceFilter]);
 
   const loadImages = async () => {
     try {
       const stats = await getStats();
       setStats(stats);
 
-      if (!useAppStore.getState().searchQuery.trim()) {
+      const state = useAppStore.getState();
+      if (!state.searchQuery.trim() && !state.searchFaceFilter) {
         const data = await getImages(0, 1000);
         const current = useAppStore.getState().images;
         // Skip the update (and the resulting full-grid re-render) when nothing
@@ -99,8 +104,8 @@ function App() {
   if (!isReady) {
     return (
       <div className={theme === 'dark' ? 'dark' : ''}>
-        <div className="h-screen w-screen bg-slate-50 dark:bg-[#0f1115] flex items-center justify-center">
-          <div className="text-blue-500 animate-pulse">Starting backend...</div>
+        <div className="h-screen w-screen bg-bg flex items-center justify-center">
+          <div className="text-accent animate-pulse">Starting backend...</div>
         </div>
       </div>
     );
@@ -108,7 +113,7 @@ function App() {
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
-      <div className="flex h-screen bg-slate-50 dark:bg-[#0f1115] text-slate-900 dark:text-slate-100 overflow-hidden font-sans selection:bg-blue-500/30">
+      <div className="flex h-screen bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
         <Sidebar />
         
         <main className="flex-1 flex flex-col min-w-0">
@@ -125,6 +130,7 @@ function App() {
         </main>
         
         <Lightbox />
+        <ContextMenu />
       </div>
     </div>
   );

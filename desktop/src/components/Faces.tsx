@@ -23,42 +23,42 @@ const FaceCard = ({ face, isSelected, onSelect, onNameSave }: {
   };
 
   return (
-    <div 
-      className={`bg-white dark:bg-[#1a1d24] rounded-lg overflow-hidden border transition-colors flex flex-col relative group ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 shadow-md' : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 shadow-sm dark:shadow-none'}`}
+    <div
+      className={`bg-surface rounded-lg overflow-hidden border transition-colors duration-250 ease-apple flex flex-col relative group ${isSelected ? 'border-accent ring-1 ring-accent shadow-md' : 'border-border hover:border-accent/50'}`}
     >
-      <div className="aspect-square bg-slate-200 dark:bg-slate-900 w-full relative cursor-pointer" onClick={() => onSelect(face.id)}>
-        <img 
+      <div className="aspect-square bg-surface-hi w-full relative cursor-pointer" onClick={() => onSelect(face.id)}>
+        <img
           src={getFaceThumbnailUrl(face.id)}
           alt={face.name || `Person ${face.id}`}
           loading="lazy"
           className="w-full h-full object-cover"
         />
         {isSelected && (
-          <div className="absolute top-1.5 right-1.5 text-blue-500 bg-white rounded-full shadow-sm">
-            <CheckCircle2 size={16} className="fill-current text-blue-500 stroke-white" />
+          <div className="absolute top-1.5 right-1.5 text-accent bg-bg rounded-full shadow-sm">
+            <CheckCircle2 size={16} className="fill-current text-accent stroke-bg" />
           </div>
         )}
       </div>
       <div className="p-2">
         {isSelected ? (
-          <input 
+          <input
             type="text"
             autoFocus
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Name..."
-            className="w-full bg-slate-100 dark:bg-slate-800 border border-blue-500 rounded px-1.5 py-0.5 text-xs text-slate-900 dark:text-slate-200 focus:outline-none placeholder:text-slate-400"
+            className="w-full bg-surface-hi border border-accent rounded px-1.5 py-0.5 text-xs text-text focus:outline-none placeholder:text-text-mute"
           />
         ) : (
-          <h3 
-            className="text-slate-900 dark:text-slate-200 font-medium text-xs truncate cursor-pointer hover:text-blue-500" 
+          <h3
+            className="text-text font-medium text-xs truncate cursor-pointer hover:text-accent transition-colors duration-250 ease-apple"
             onClick={() => onSelect(face.id)}
           >
             {face.name || 'Unknown'}
           </h3>
         )}
-        <p className="text-[10px] text-slate-500 mt-0.5 flex justify-between">
+        <p className="text-[10px] text-text-mute mt-0.5 flex justify-between">
           <span>Person #{face.id}</span>
           {face.count !== undefined && <span>{face.count} photos</span>}
         </p>
@@ -85,7 +85,7 @@ export const Faces = () => {
   }, [viewMode]);
 
   const toggleSelect = (id: number) => {
-    setSelectedFaceIds(prev => 
+    setSelectedFaceIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
@@ -93,7 +93,7 @@ export const Faces = () => {
   const handleNameSave = async (id: number, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    
+
     try {
       await api.put(`/faces/${id}`, { name: trimmed });
       setSelectedFaceIds(prev => prev.filter(x => x !== id));
@@ -105,30 +105,30 @@ export const Faces = () => {
 
   const handleMerge = async () => {
     if (selectedFaceIds.length < 2) return;
-    
+
     // Find all selected face objects to check which has the most "information"
     const selected = faces.filter(f => selectedFaceIds.includes(f.id));
-    
-    // Sort logic: 
+
+    // Sort logic:
     // 1. Faces with a name come first.
     // 2. If both have a name (or neither do), the one with more photos (count) comes first.
     selected.sort((a, b) => {
       const aHasName = a.name && a.name.trim() !== '' ? 1 : 0;
       const bHasName = b.name && b.name.trim() !== '' ? 1 : 0;
-      
+
       if (aHasName !== bHasName) {
         return bHasName - aHasName; // 1 (named) before 0 (unnamed)
       }
-      
+
       // If both named or both unnamed, sort by count (descending)
       const aCount = a.count || 0;
       const bCount = b.count || 0;
       return bCount - aCount;
     });
-    
+
     const primary_id = selected[0].id;
     const other_ids = selectedFaceIds.filter(id => id !== primary_id);
-    
+
     try {
       await api.post('/faces/merge', { primary_id, other_ids });
       setSelectedFaceIds([]);
@@ -140,21 +140,21 @@ export const Faces = () => {
 
   if (viewMode !== 'faces' && viewMode !== 'people') return null;
 
-  const displayFaces = viewMode === 'people' 
+  const displayFaces = viewMode === 'people'
     ? faces.filter(f => f.name && f.name.trim() !== '')
     : faces;
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 dark:bg-[#0f1115] h-full overflow-hidden">
+    <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
       <div className="px-8 py-4 flex items-center justify-between">
-        <span className="text-sm text-slate-400">{displayFaces.length.toLocaleString()} {viewMode === 'people' ? 'named people' : 'people identified'}</span>
-        
+        <span className="text-sm text-text-mute">{displayFaces.length.toLocaleString()} {viewMode === 'people' ? 'named people' : 'people identified'}</span>
+
         {selectedFaceIds.length > 0 && (
           <div className="flex items-center gap-3">
             {viewMode === 'faces' && selectedFaceIds.length > 1 && (
-              <button 
+              <button
                 onClick={handleMerge}
-                className="flex items-center gap-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 bg-surface-hi hover:brightness-110 text-text px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-250 ease-apple"
               >
                 <Merge size={16} />
                 Merge {selectedFaceIds.length}
@@ -166,14 +166,14 @@ export const Faces = () => {
 
       <div className="flex-1 px-8 pb-4 overflow-y-auto">
         {displayFaces.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-slate-500 flex-col gap-4">
+          <div className="h-full flex items-center justify-center text-text-mute flex-col gap-4">
             <Users size={48} className="opacity-20" />
             <p>No {viewMode === 'people' ? 'named people' : 'faces'} found yet.</p>
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
             {displayFaces.map((face) => (
-              <FaceCard 
+              <FaceCard
                 key={face.id}
                 face={face}
                 isSelected={selectedFaceIds.includes(face.id)}

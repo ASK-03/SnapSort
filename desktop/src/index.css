@@ -2,9 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ss-bg: #FAF9F6;
+  --ss-surface: #FFFFFF;
+  --ss-surface-hi: #F3F1ED;
+  --ss-border: #E4E1DA;
+  --ss-accent: #B97F2E;
+  --ss-text: #1A1A1A;
+  --ss-text-dim: #6B6E74;
+  --ss-text-mute: #9A9DA3;
+  --ss-success: #3F9A6C;
+}
+
+.dark {
+  --ss-bg: #141517;
+  --ss-surface: #1A1B1E;
+  --ss-surface-hi: #1E2023;
+  --ss-border: #2C2E32;
+  --ss-accent: #D9A24B;
+  --ss-text: #ECEDEE;
+  --ss-text-dim: #9A9DA3;
+  --ss-text-mute: #75787E;
+  --ss-success: #6FBF8B;
+}
+
 @layer base {
   body {
-    @apply bg-slate-900 text-slate-100 antialiased;
+    @apply bg-bg text-text antialiased;
   }
 }
 
@@ -14,12 +38,25 @@
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f1115;
+  background: var(--ss-bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--ss-border);
   border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: var(--ss-text-mute);
+}
+
+/* Apple-style cinematic timing for every view transition (grid→viewer morph,
+   viewer prev/next), so the browser's default crossfade/morph matches the
+   rest of the app's motion instead of its ~150ms default. */
+::view-transition-group(*) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 250ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
