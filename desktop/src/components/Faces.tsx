@@ -2,11 +2,19 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { getFaceThumbnailUrl, api } from '../api';
 import { Users, CheckCircle2, Merge } from 'lucide-react';
+import { withViewTransition } from '../lib/viewTransition';
+import { flushSync } from 'react-dom';
+import { PERSON_AVATAR_VT, personNav } from './PersonView';
 
-const FaceCard = ({ face, isSelected, onSelect, onNameSave }: {
+// Survives unmount so the grid is on screen the instant PersonView closes
+// (the back transition needs the target card in the DOM synchronously).
+let facesCache: {id: number, name: string, count?: number}[] = [];
+
+const FaceCard = ({ face, isSelected, onSelect, onOpen, onNameSave }: {
   face: {id: number, name: string, count?: number},
   isSelected: boolean,
   onSelect: (id: number) => void,
+  onOpen?: (face: {id: number, name: string}, avatar: HTMLElement) => void,
   onNameSave: (id: number, name: string) => Promise<void>
 }) => {
   const [name, setName] = useState(face.name || '');
@@ -24,13 +32,18 @@ const FaceCard = ({ face, isSelected, onSelect, onNameSave }: {
 
   return (
     <div
-      className={`bg-surface rounded-lg overflow-hidden border transition-colors duration-250 ease-apple flex flex-col relative group ${isSelected ? 'border-accent ring-1 ring-accent shadow-md' : 'border-border hover:border-accent/50'}`}
+      className={`bg-surface rounded-lg overflow-hidden border transition-colors duration-150 flex flex-col relative group ${isSelected ? 'border-accent ring-1 ring-accent shadow-md' : 'border-border hover:border-accent/50'}`}
     >
-      <div className="aspect-square bg-surface-hi w-full relative cursor-pointer" onClick={() => onSelect(face.id)}>
+      <div
+        className={`aspect-square bg-surface-hi relative cursor-pointer ${onOpen ? 'w-4/5 mx-auto mt-3 rounded-full overflow-hidden' : 'w-full'}`}
+        onClick={(e) => onOpen ? onOpen(face, e.currentTarget) : onSelect(face.id)}
+      >
         <img
           src={getFaceThumbnailUrl(face.id)}
           alt={face.name || `Person ${face.id}`}
           loading="lazy"
+          data-face-avatar
+          style={face.id === personNav.returnId ? { viewTransitionName: PERSON_AVATAR_VT } as any : undefined}
           className="w-full h-full object-cover"
         />
         {isSelected && (
@@ -40,7 +53,7 @@ const FaceCard = ({ face, isSelected, onSelect, onNameSave }: {
         )}
       </div>
       <div className="p-2">
-        {isSelected ? (
+        {isSelected && !onOpen ? (
           <input
             type="text"
             autoFocus
@@ -52,8 +65,8 @@ const FaceCard = ({ face, isSelected, onSelect, onNameSave }: {
           />
         ) : (
           <h3
-            className="text-text font-medium text-xs truncate cursor-pointer hover:text-accent transition-colors duration-250 ease-apple"
-            onClick={() => onSelect(face.id)}
+            className="text-text font-medium text-xs truncate cursor-pointer hover:text-accent transition-colors duration-150"
+            onClick={(e) => onOpen ? onOpen(face, e.currentTarget) : onSelect(face.id)}
           >
             {face.name || 'Unknown'}
           </h3>
@@ -68,13 +81,13 @@ const FaceCard = ({ face, isSelected, onSelect, onNameSave }: {
 };
 
 export const Faces = () => {
-  const { viewMode } = useAppStore();
-  const [faces, setFaces] = useState<{id: number, name: string, count?: number}[]>([]);
+  const { viewMode, setSelectedPerson } = useAppStore();
+  const [faces, setFaces] = useState(facesCache);
   const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
 
   const fetchFaces = () => {
     api.get('/faces')
-      .then(res => setFaces(res.data.faces))
+      .then(res => { facesCache = res.data.faces; setFaces(res.data.faces); })
       .catch(console.error);
   };
 
@@ -88,6 +101,15 @@ export const Faces = () => {
     setSelectedFaceIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
+  };
+
+  const openPerson = (face: {id: number, name: string}, el: HTMLElement) => {
+    // Name the clicked avatar so the browser morphs it into PersonView's header.
+    personNav.returnId = null;
+    document.querySelectorAll<HTMLElement>('[data-face-avatar]').forEach(a => { a.style.viewTransitionName = ''; });
+    const avatar = el.querySelector('img') ?? el;
+    (avatar as HTMLElement).style.viewTransitionName = PERSON_AVATAR_VT;
+    withViewTransition(() => flushSync(() => setSelectedPerson({ id: face.id, name: face.name })));
   };
 
   const handleNameSave = async (id: number, name: string) => {
@@ -154,7 +176,7 @@ export const Faces = () => {
             {viewMode === 'faces' && selectedFaceIds.length > 1 && (
               <button
                 onClick={handleMerge}
-                className="flex items-center gap-2 bg-surface-hi hover:brightness-110 text-text px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-250 ease-apple"
+                className="flex items-center gap-2 bg-surface-hi hover:brightness-110 text-text px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-150"
               >
                 <Merge size={16} />
                 Merge {selectedFaceIds.length}
@@ -178,6 +200,7 @@ export const Faces = () => {
                 face={face}
                 isSelected={selectedFaceIds.includes(face.id)}
                 onSelect={toggleSelect}
+                onOpen={viewMode === 'people' ? openPerson : undefined}
                 onNameSave={handleNameSave}
               />
             ))}

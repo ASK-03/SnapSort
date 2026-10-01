@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from './store';
-import { getImages, getProgress, getSearch, getStats, initApi, getImagesForFace } from './api';
+import { getImages, getProgress, getSearch, getStats, initApi } from './api';
 
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { Gallery } from './components/Gallery';
 import { Faces } from './components/Faces';
-import { ImageDetails } from './components/ImageDetails';
+import { PersonView } from './components/PersonView';
 import { Lightbox } from './components/Lightbox';
 import { ContextMenu } from './components/ContextMenu';
 import { Settings } from './components/Settings';
 import { About } from './components/About';
 
 function App() {
-  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, searchFaceFilter, setStats, viewMode, setViewMode, theme } = useAppStore();
+  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, setStats, viewMode, setViewMode, theme, selectedPerson } = useAppStore();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -51,17 +51,6 @@ function App() {
 
   useEffect(() => {
     const handleSearch = async () => {
-      if (searchFaceFilter) {
-        try {
-          const results = await getImagesForFace(searchFaceFilter.id);
-          setImages(results);
-          setViewMode('photos');
-        } catch (e) {
-          console.error(e);
-        }
-        return;
-      }
-
       if (!searchQuery.trim()) {
         loadImages();
         return;
@@ -78,7 +67,7 @@ function App() {
     // Add debounce here in a real app, for now just call on change
     const timeout = setTimeout(handleSearch, 300);
     return () => clearTimeout(timeout);
-  }, [searchQuery, searchFaceFilter]);
+  }, [searchQuery]);
 
   const loadImages = async () => {
     try {
@@ -86,7 +75,7 @@ function App() {
       setStats(stats);
 
       const state = useAppStore.getState();
-      if (!state.searchQuery.trim() && !state.searchFaceFilter) {
+      if (!state.searchQuery.trim()) {
         const data = await getImages(0, 1000);
         const current = useAppStore.getState().images;
         // Skip the update (and the resulting full-grid re-render) when nothing
@@ -121,11 +110,10 @@ function App() {
           
           <div className="flex-1 flex overflow-hidden">
             {viewMode === 'photos' && <Gallery />}
-            {(viewMode === 'faces' || viewMode === 'people') && <Faces />}
+            {viewMode === 'people' && selectedPerson && <PersonView />}
+            {(viewMode === 'faces' || (viewMode === 'people' && !selectedPerson)) && <Faces />}
             {viewMode === 'settings' && <Settings />}
             {viewMode === 'about' && <About />}
-            
-            <ImageDetails />
           </div>
         </main>
         

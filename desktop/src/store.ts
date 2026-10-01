@@ -19,13 +19,6 @@ interface AppState {
   lightboxImage: string | null;
   setLightboxImage: (image: string | null) => void;
   
-  selectedImage: string | null;
-  setSelectedImage: (image: string | null) => void;
-  
-  showRightSidebar: boolean;
-  setShowRightSidebar: (show: boolean) => void;
-
-
   stats: { photos: number; faces: number; people: number };
   setStats: (stats: { photos: number; faces: number; people: number }) => void;
 
@@ -35,11 +28,14 @@ interface AppState {
   contextMenu: { x: number; y: number; imagePath: string } | null;
   setContextMenu: (menu: { x: number; y: number; imagePath: string } | null) => void;
 
-  searchFaceFilter: { id: number; name: string } | null;
-  setSearchFaceFilter: (filter: { id: number; name: string } | null) => void;
+  selectedPerson: { id: number; name: string } | null;
+  setSelectedPerson: (person: { id: number; name: string } | null) => void;
 
   viewerZoom: number;
   setViewerZoom: (zoom: number) => void;
+
+  viewerPan: { x: number; y: number };
+  setViewerPan: (pan: { x: number; y: number }) => void;
 
   folderFilter: string | null;
   setFolderFilter: (folder: string | null) => void;
@@ -62,13 +58,6 @@ export const useAppStore = create<AppState>((set) => ({
   setLightboxImage: (lightboxImage) => set({ lightboxImage }),
   setViewMode: (viewMode) => set({ viewMode }),
   
-  selectedImage: null,
-  setSelectedImage: (selectedImage) => set({ selectedImage }),
-  
-  showRightSidebar: false,
-  setShowRightSidebar: (showRightSidebar) => set({ showRightSidebar }),
-
-
   stats: { photos: 0, faces: 0, people: 0 },
   setStats: (stats) => set({ stats }),
 
@@ -78,11 +67,14 @@ export const useAppStore = create<AppState>((set) => ({
   contextMenu: null,
   setContextMenu: (contextMenu) => set({ contextMenu }),
 
-  searchFaceFilter: null,
-  setSearchFaceFilter: (searchFaceFilter) => set({ searchFaceFilter }),
+  selectedPerson: null,
+  setSelectedPerson: (selectedPerson) => set({ selectedPerson }),
 
   viewerZoom: 1,
   setViewerZoom: (viewerZoom) => set({ viewerZoom }),
+
+  viewerPan: { x: 0, y: 0 },
+  setViewerPan: (viewerPan) => set({ viewerPan }),
 
   folderFilter: null,
   setFolderFilter: (folderFilter) => set({ folderFilter }),

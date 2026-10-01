@@ -24,7 +24,7 @@ const basename = (path: string) => {
 export const Sidebar = () => {
   const {
     viewMode, setViewMode, isScanning, setIsScanning, progress, stats,
-    images, folderFilter, setFolderFilter, setSearchQuery, setSearchFaceFilter,
+    images, folderFilter, setFolderFilter, setSearchQuery, setSelectedPerson,
   } = useAppStore();
 
   const handleSelectFolder = async () => {
@@ -42,14 +42,11 @@ export const Sidebar = () => {
       const dir = dirname(path);
       counts.set(dir, (counts.get(dir) || 0) + 1);
     }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
   }, [images]);
 
   const openFolder = (dir: string) => {
     setSearchQuery('');
-    setSearchFaceFilter(null);
     setFolderFilter(folderFilter === dir ? null : dir);
     setViewMode('photos');
   };
@@ -78,21 +75,21 @@ export const Sidebar = () => {
       <div className="px-4 mb-6">
         <button
           onClick={handleSelectFolder}
-          className="w-full flex items-center justify-center gap-2 bg-accent hover:brightness-110 text-bg py-2.5 rounded-lg transition-all duration-250 ease-apple font-medium"
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:brightness-110 text-bg py-2.5 rounded-lg transition-all duration-150 font-medium"
         >
           Select Folder
         </button>
       </div>
 
-      {/* Main Nav */}
-      <div className="px-3 space-y-1 flex-1 overflow-y-auto">
+      {/* Main Nav — fixed, never scrolls */}
+      <div className="px-3 space-y-1 flex-shrink-0">
         {navItems.map((item) => {
           const isActive = viewMode === item.id && !folderFilter;
           return (
             <button
               key={item.id}
-              onClick={() => { setFolderFilter(null); setViewMode(item.id as any); }}
-              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors duration-250 ease-apple ${
+              onClick={() => { setFolderFilter(null); setSelectedPerson(null); setViewMode(item.id as any); }}
+              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors duration-150 ${
                 isActive
                   ? 'bg-accent/15 text-accent'
                   : 'text-text-dim hover:text-text hover:bg-surface-hi'
@@ -108,19 +105,23 @@ export const Sidebar = () => {
             </button>
           );
         })}
+      </div>
 
-        {folders.length > 0 && (
-          <>
-            <div className="pt-5 pb-2 px-4 text-[11px] font-semibold tracking-wide text-text-mute">
-              FOLDERS
-            </div>
+      {/* Folders — its own scrollable region, like a file explorer, so it
+          never pushes the nav/settings items off screen. */}
+      {folders.length > 0 && (
+        <div className="flex-1 min-h-0 flex flex-col mt-3">
+          <div className="pt-2 pb-2 px-7 text-[11px] font-semibold tracking-wide text-text-mute flex-shrink-0">
+            FOLDERS
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 space-y-0.5">
             {folders.map(([dir, count]) => {
               const isActive = folderFilter === dir;
               return (
                 <button
                   key={dir}
                   onClick={() => openFolder(dir)}
-                  className={`flex items-center gap-2.5 w-full px-4 py-2 rounded-lg transition-colors duration-250 ease-apple ${
+                  className={`flex items-center gap-2.5 w-full px-4 py-2 rounded-lg transition-colors duration-150 ${
                     isActive ? 'bg-accent/15 text-accent' : 'text-text-dim hover:text-text hover:bg-surface-hi'
                   }`}
                   title={dir}
@@ -131,18 +132,20 @@ export const Sidebar = () => {
                 </button>
               );
             })}
-          </>
-        )}
+          </div>
+        </div>
+      )}
+      {folders.length === 0 && <div className="flex-1 min-h-0" />}
 
-        <div className="my-6 border-t border-border mx-3"></div>
-
+      <div className="px-3 flex-shrink-0">
+        <div className="my-3 border-t border-border mx-3"></div>
         {bottomNavItems.map((item) => {
           const isActive = viewMode === item.id;
           return (
             <button
               key={item.id}
               onClick={() => setViewMode(item.id as any)}
-              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors duration-250 ease-apple ${
+              className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors duration-150 ${
                 isActive
                   ? 'bg-accent/15 text-accent'
                   : 'text-text-dim hover:text-text hover:bg-surface-hi'
@@ -158,14 +161,14 @@ export const Sidebar = () => {
       {/* Progress / Status */}
       <div className="p-4 m-4 bg-surface-hi rounded-xl border border-border">
         <div className="flex items-center gap-3 mb-3">
-          <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-accent shadow-[0_0_8px_rgba(217,162,75,0.5)] animate-pulse' : 'bg-success'}`}></div>
+          <div className={`w-2 h-2 rounded-full ${isScanning ? 'bg-accent shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse' : 'bg-success'}`}></div>
           <span className="text-xs font-medium text-text-dim">
             {isScanning ? 'Scanning…' : 'Idle'}
           </span>
         </div>
         <div className="w-full bg-border rounded-full h-1.5 mb-2 overflow-hidden">
           <div
-            className="bg-accent h-1.5 rounded-full transition-all duration-250 ease-apple"
+            className="bg-accent h-1.5 rounded-full transition-all duration-320 ease-apple"
             style={{ width: `${percent}%` }}
           ></div>
         </div>

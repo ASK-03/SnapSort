@@ -1,10 +1,14 @@
 import { useAppStore } from '../store';
 import { getPreviewUrl } from '../api';
-import { CheckCircle2, X, Grid2X2, Folder } from 'lucide-react';
-import { vtName, withViewTransition } from '../lib/viewTransition';
+import { X, Grid2X2, Folder } from 'lucide-react';
+import { withViewTransition } from '../lib/viewTransition';
 
 import { useMemo, useState } from 'react';
 import { VirtuosoGrid } from 'react-virtuoso';
+
+// Shown when a tile's source file is gone (drive unmounted, file moved).
+// Data URI so swapping it in can't re-fire onError and loop.
+const MISSING_TILE = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.25' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3 3l18 18M21 15l-5-5L5 21M8 8a1 1 0 100-2 1 1 0 000 2'/><path d='M21 17V5a2 2 0 00-2-2H7M3 7v12a2 2 0 002 2h12'/></svg>";
 
 const dirname = (path: string) => {
   const parts = path.split(/[\\/]/);
@@ -17,11 +21,58 @@ const basename = (path: string) => {
   return parts[parts.length - 1] || path;
 };
 
+// Static class names (not built from a runtime template) so Tailwind's
+// JIT scanner picks them up at build time.
+const GRID_COLS_CLASS: Record<number, string> = {
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+  6: 'grid-cols-6',
+  8: 'grid-cols-8',
+};
+
+// Virtualized tile grid shared by Gallery and PersonView.
+export const PhotoGrid = ({ paths, cols }: { paths: string[]; cols: number }) => {
+  const { setLightboxImage, setContextMenu } = useAppStore();
+  return (
+    <VirtuosoGrid
+      style={{ height: '100%' }}
+      totalCount={paths.length}
+      listClassName={`grid gap-4 pt-4 ${GRID_COLS_CLASS[cols]}`}
+      itemContent={(index) => {
+        const path = paths[index];
+        return (
+          <div
+            className="rounded-2xl overflow-hidden cursor-pointer relative group border-2 border-transparent hover:border-accent/50 transition-colors duration-150 bg-surface-hi aspect-square"
+            onClick={() => withViewTransition(() => setLightboxImage(path))}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, imagePath: path });
+            }}
+          >
+            <img
+              src={getPreviewUrl(path)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+              style={{ imageOrientation: 'from-image' } as any}
+              onError={(e) => {
+                e.currentTarget.src = MISSING_TILE;
+                e.currentTarget.className = 'w-full h-full object-contain p-8';
+              }}
+            />
+          </div>
+        );
+      }}
+    />
+  );
+};
+
 export const Gallery = () => {
   const {
-    images, searchQuery, setSearchQuery, searchFaceFilter, setSearchFaceFilter,
-    folderFilter, setFolderFilter, selectedImage, setSelectedImage, setShowRightSidebar,
-    setLightboxImage, setContextMenu,
+    images, searchQuery, setSearchQuery,
+    folderFilter, setFolderFilter,
   } = useAppStore();
   const [zoom, setZoom] = useState(6);
 
@@ -35,35 +86,16 @@ export const Gallery = () => {
     }
   };
 
-  // Static class names (not built from a runtime template) so Tailwind's
-  // JIT scanner picks them up at build time.
-  const GRID_COLS_CLASS: Record<number, string> = {
-    3: 'grid-cols-3',
-    4: 'grid-cols-4',
-    6: 'grid-cols-6',
-    8: 'grid-cols-8',
-  };
-
   const displayImages = useMemo(
     () => (folderFilter ? images.filter((p) => dirname(p) === folderFilter) : images),
     [images, folderFilter]
   );
 
-  const handleImageClick = (path: string) => {
-    setSelectedImage(path);
-    setShowRightSidebar(true);
-  };
-
-  const openLightbox = (path: string) => {
-    withViewTransition(() => setLightboxImage(path));
-  };
-
-  const hasSearch = searchQuery.trim().length > 0 || !!searchFaceFilter;
+  const hasSearch = searchQuery.trim().length > 0;
   const numCols = getColCount();
 
   const clearFilters = () => {
     setSearchQuery('');
-    setSearchFaceFilter(null);
   };
 
   return (
@@ -83,7 +115,7 @@ export const Gallery = () => {
           )}
           {hasSearch ? (
             <div className="flex items-center gap-2 bg-accent/10 text-accent px-3 py-1.5 rounded-full text-sm border border-accent/20">
-              <span>"{searchFaceFilter ? searchFaceFilter.name : searchQuery}"</span>
+              <span>"{searchQuery}"</span>
               <button onClick={clearFilters} className="hover:brightness-125">
                 <X size={14} />
               </button>
@@ -103,42 +135,7 @@ export const Gallery = () => {
             <p>No images to display</p>
           </div>
         ) : (
-          <VirtuosoGrid
-            style={{ height: '100%' }}
-            totalCount={displayImages.length}
-            listClassName={`grid gap-4 pt-8 ${GRID_COLS_CLASS[numCols]}`}
-            itemContent={(index) => {
-              const path = displayImages[index];
-              const isSelected = selectedImage === path;
-              return (
-                <div
-                  className={`rounded-xl overflow-hidden cursor-pointer relative group border-2 border-transparent hover:border-accent/50 transition-colors duration-250 ease-apple bg-surface-hi aspect-square ${isSelected ? 'ring-2 ring-inset ring-accent' : ''}`}
-                  onClick={() => handleImageClick(path)}
-                  onDoubleClick={() => openLightbox(path)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ x: e.clientX, y: e.clientY, imagePath: path });
-                  }}
-                >
-                  <img
-                    src={getPreviewUrl(path)}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                    style={{ imageOrientation: 'from-image', viewTransitionName: vtName(path) } as any}
-                  />
-
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 text-accent bg-bg rounded-full">
-                      <CheckCircle2 size={20} className="fill-current text-accent stroke-bg" />
-                    </div>
-                  )}
-                  <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-accent shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-250 ease-apple"></div>
-                </div>
-              );
-            }}
-          />
+          <PhotoGrid paths={displayImages} cols={numCols} />
         )}
       </div>
 
