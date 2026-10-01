@@ -127,21 +127,15 @@ This document outlines upcoming features, improvements, and bug fixes for **Snap
 
 ## UI Redesign
 
-Search-first, amber/graphite (+ light mode), 250ms Apple-style motion. Mockup: https://claude.ai/artifact/LiyjoSYmqDvsZt5bNZK99F
+Search-first, amber/graphite (+ light mode), 250ms Apple-style motion. Mockup: https://claude.ai/artifact/LiyjoSYmqDvsZt5bNZK99F. Core redesign (tokens, store, Sidebar, Gallery, ContextMenu, Lightbox, InfoPanel, EditPanel, Faces) shipped — see Completed.
 
-### Frontend
+### Remaining
 
-- [ ] Design tokens: dark + light palette as CSS vars, Tailwind `accent`/`apple`-easing/`250` duration, Instrument Sans
-- [ ] Store: `viewerPanel`, `contextMenu`, `searchFaceFilter`, `viewerZoom`
-- [ ] Sidebar: restyle, Folders section (client-derived from image paths)
-- [ ] Search chip: show face name instead of raw `face:<id>`
-- [ ] Gallery: restyle, `ring-inset` selection fix, right-click context menu, grid→viewer morph transition
-- [ ] New `ContextMenu.tsx` (Open wired; Reprocess/Rename/Favorite/Delete shown disabled)
-- [ ] Lightbox: default state (restyle, face-name strip, nav crossfade) + info/edit panel states (no nav arrows, image recenter transition)
-- [ ] New `InfoPanel.tsx` (details + people, extracted from ImageDetails)
-- [ ] New `EditPanel.tsx` (crop/rotate/adjust/filters rail — UI/preview only, no persistence)
-- [ ] Viewer zoom control (−/+/slider, scale transition)
-- [ ] Faces.tsx restyle to new tokens
+- [ ] Immich-style Library grid: date-grouped rows, justified/variable-tile layout, right-edge year/month scrubber (needs a different grid approach than today's virtualized uniform grid — see two options logged in-session, not yet chosen)
+- [ ] Stackable style-filter presets in EditPanel (beyond the existing Adjust sliders, which already combine brightness/contrast/saturation/warmth at once)
+- [ ] Mini-map when zoomed in: small overview thumbnail with a draggable viewport rectangle (cursor/wheel zoom + drag-to-pan shipped)
+- [ ] Fix duplicate-key React warning in the console ("two children with the same key `0`") seen while browsing the Viewer's face list — likely two face records sharing id `0` from the backend, not yet root-caused
+- [ ] Manually verify light mode end-to-end (only dark mode was exercised while building this pass)
 
 ### Backend
 
@@ -153,6 +147,7 @@ Search-first, amber/graphite (+ light mode), 250ms Apple-style motion. Mockup: h
 - [ ] Image delete / favorite / rename endpoints
 - [ ] Real EXIF-based dimensions/date (replace mocked metadata)
 - [ ] Image edit persistence (crop/rotate/adjust save)
+- [ ] Expose per-image date taken via `/api/images` (needed for the Immich-style date-grouped grid)
 
 ---
 

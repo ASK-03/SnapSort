@@ -1,6 +1,6 @@
 [project]
 name = "snapsort"
-version = "0.1.0"
+version = "3.1.0"
 description = "Free, open-source AI-powered local photo manager"
 requires-python = ">=3.12"
 dependencies = [

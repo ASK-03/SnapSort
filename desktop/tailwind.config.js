@@ -26,6 +26,7 @@ export default {
       },
       transitionDuration: {
         '250': '250ms',
+        '320': '320ms',
       },
     },
   },

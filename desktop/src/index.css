@@ -7,7 +7,7 @@
   --ss-surface: #FFFFFF;
   --ss-surface-hi: #F3F1ED;
   --ss-border: #E4E1DA;
-  --ss-accent: #B97F2E;
+  --ss-accent: #2563EB;
   --ss-text: #1A1A1A;
   --ss-text-dim: #6B6E74;
   --ss-text-mute: #9A9DA3;
@@ -19,7 +19,7 @@
   --ss-surface: #1A1B1E;
   --ss-surface-hi: #1E2023;
   --ss-border: #2C2E32;
-  --ss-accent: #D9A24B;
+  --ss-accent: #3B82F6;
   --ss-text: #ECEDEE;
   --ss-text-dim: #9A9DA3;
   --ss-text-mute: #75787E;
@@ -48,15 +48,69 @@
   background: var(--ss-text-mute);
 }
 
-/* Apple-style cinematic timing for every view transition (grid→viewer morph,
-   viewer prev/next), so the browser's default crossfade/morph matches the
-   rest of the app's motion instead of its ~150ms default. */
+/* Apple-style cinematic timing for every view transition (Viewer open/close,
+   prev/next crossfade), so the browser's default matches the rest of the
+   app's motion instead of its ~150ms default. Named transitions below
+   override this per-element where a plain crossfade isn't premium enough. */
 ::view-transition-group(*) {
-  animation-duration: 250ms;
+  animation-duration: 320ms;
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 ::view-transition-old(*),
 ::view-transition-new(*) {
-  animation-duration: 250ms;
+  animation-duration: 320ms;
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Viewer open/close: scale + fade (like a Quick Look panel). The
+   `lightbox-root` element also PERSISTS across prev/next navigation (same
+   node, not remounted), and the browser generates an old+new snapshot pair
+   for a persisting named element too — so without `:only-child` here, this
+   entrance/exit animation was replaying on every single nav (the backdrop
+   briefly fading toward the grid and back), not just on true open/close.
+   `:only-child` is true only when there's no snapshot on the other side —
+   i.e. genuinely entering (nothing existed before) or exiting (nothing
+   exists after) — which is exactly open/close and never a plain nav. */
+@keyframes lightbox-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes lightbox-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+::view-transition-new(lightbox-root):only-child {
+  animation: lightbox-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+::view-transition-old(lightbox-root):only-child {
+  animation: lightbox-out 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+/* Nav (both old and new exist): the backdrop/top bar didn't actually
+   change, so it shouldn't animate at all — only the named `viewer-image`
+   group should. */
+::view-transition-old(lightbox-root):not(:only-child),
+::view-transition-new(lightbox-root):not(:only-child) {
+  animation: none;
+}
+
+/* The photo itself: fade + a subtle scale on the incoming layer only.
+   `::view-transition-new` always paints ON TOP of `::view-transition-old` —
+   so the top (new) layer must never be smaller than the bottom (old) layer
+   at any frame, or the old photo's edges peek out from underneath for the
+   whole crossfade (looked like the previous photo "flashing in the back").
+   Old stays fixed size and just fades; new grows in from slightly smaller
+   to 1, always covering old's footprint as it fades in over it. */
+@keyframes viewer-image-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes viewer-image-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+::view-transition-old(viewer-image) {
+  animation: viewer-image-out 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+::view-transition-new(viewer-image) {
+  animation: viewer-image-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }

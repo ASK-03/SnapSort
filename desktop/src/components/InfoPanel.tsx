@@ -1,33 +1,19 @@
-import { X, UserCircle2 } from 'lucide-react';
-import { getImageUrl, getFaceThumbnailUrl } from '../api';
-import { useAppStore } from '../store';
+import { UserCircle2 } from 'lucide-react';
+import { getFaceThumbnailUrl } from '../api';
 
 interface Face { id: number; name: string | null }
 
-export const InfoPanel = ({ imagePath, faces, open }: { imagePath: string; faces: Face[]; open: boolean }) => {
-  const setViewerPanel = useAppStore((s) => s.setViewerPanel);
+export const InfoPanel = ({ imagePath, faces, open, onFaceClick }: { imagePath: string; faces: Face[]; open: boolean; onFaceClick: (f: Face) => void }) => {
   const filename = imagePath.split(/[\\/]/).pop() || 'Unknown';
 
   return (
     <div
-      className="h-full bg-[#15161A] border-l border-white/10 overflow-hidden transition-[width] duration-250 ease-apple flex-shrink-0"
+      className="h-full bg-[#15161A] border-l border-white/10 overflow-hidden transition-[width] duration-320 ease-apple flex-shrink-0"
       style={{ width: open ? 320 : 0 }}
     >
-      <div className="w-[320px] h-full flex flex-col px-[18px] py-5 overflow-y-auto text-white">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-sm font-semibold">Info</span>
-          <button
-            onClick={() => setViewerPanel('none')}
-            className="w-[26px] h-[26px] rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors duration-250 ease-apple"
-          >
-            <X size={12} />
-          </button>
-        </div>
-
-        <div
-          className="w-full h-[150px] rounded-[10px] bg-cover bg-center mb-3.5"
-          style={{ backgroundImage: `url(${getImageUrl(imagePath)})` }}
-        />
+      {/* No thumbnail here — the main Viewer already shows the photo
+          full-size; a second small copy was just empty-feeling padding. */}
+      <div className="w-[320px] h-full flex flex-col px-[18px] pt-[76px] pb-5 overflow-y-auto text-white">
         <span className="text-[13px] font-semibold mb-0.5 truncate">{filename}</span>
         <span className="text-[11.5px] text-white/45 mb-4">Local file</span>
 
@@ -45,10 +31,15 @@ export const InfoPanel = ({ imagePath, faces, open }: { imagePath: string; faces
           <span className="text-[12px] text-white/40">No faces detected.</span>
         ) : (
           faces.map((f) => (
-            <div key={f.id} className="flex items-center gap-2.5 py-1.5">
-              <img src={getFaceThumbnailUrl(f.id)} className="w-7 h-7 rounded-full object-cover" alt={f.name || 'face'} />
+            <button
+              key={f.id}
+              onClick={() => onFaceClick(f)}
+              title={`Show all photos of ${f.name || 'this person'}`}
+              className="w-full flex items-center gap-2.5 py-1.5 text-left hover:text-accent transition-colors duration-150"
+            >
+              <img src={getFaceThumbnailUrl(f.id)} className="w-7 h-7 rounded-full object-cover" alt="" />
               <span className="flex-1 text-[12.5px] font-semibold truncate">{f.name || 'Unknown'}</span>
-            </div>
+            </button>
           ))
         )}
       </div>

@@ -32,7 +32,7 @@ export const TopBar = () => {
             placeholder="Search your photos — people, places, things…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-hi border border-border rounded-xl py-2.5 pl-11 pr-14 text-sm text-text focus:outline-none focus:border-accent transition-colors duration-250 ease-apple placeholder:text-text-mute"
+            className="w-full bg-surface-hi border border-border rounded-xl py-2.5 pl-11 pr-14 text-sm text-text focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-mute"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-bg text-text-mute text-[10px] px-2 py-1 rounded font-medium border border-border">
             {shortcutText}
@@ -42,7 +42,7 @@ export const TopBar = () => {
 
       <button
         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        className="ml-4 p-3 rounded-xl border border-border text-text-dim hover:bg-surface-hi transition-colors duration-250 ease-apple"
+        className="ml-4 p-3 rounded-xl border border-border text-text-dim hover:bg-surface-hi transition-colors duration-150"
       >
         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
       </button>

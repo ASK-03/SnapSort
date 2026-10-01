@@ -998,7 +998,7 @@ wheels = [
 
 [[package]]
 name = "snapsort"
-version = "0.1.0"
+version = "3.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "faiss-cpu" },

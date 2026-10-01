@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store';
 import { FolderOpen, UserCircle, Pencil, Heart, Trash2 } from 'lucide-react';
+import { withViewTransition } from '../lib/viewTransition';
 
 export const ContextMenu = () => {
   const { contextMenu, setContextMenu, setLightboxImage } = useAppStore();
@@ -9,19 +10,25 @@ export const ContextMenu = () => {
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
+    const onKeyDown = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('click', close);
-    window.addEventListener('contextmenu', close);
-    window.addEventListener('keydown', (e) => e.key === 'Escape' && close());
+    // Capture phase: must run BEFORE a right-click on a different card's own
+    // bubble-phase onContextMenu handler, otherwise this listener (added by
+    // the PREVIOUS open) fires after and immediately nulls out the menu the
+    // new right-click just opened.
+    window.addEventListener('contextmenu', close, { capture: true });
+    window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('click', close);
-      window.removeEventListener('contextmenu', close);
+      window.removeEventListener('contextmenu', close, { capture: true });
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, [contextMenu, setContextMenu]);
 
   if (!contextMenu) return null;
 
   const items = [
-    { label: 'Open', icon: FolderOpen, enabled: true, onClick: () => setLightboxImage(contextMenu.imagePath) },
+    { label: 'Open', icon: FolderOpen, enabled: true, onClick: () => withViewTransition(() => setLightboxImage(contextMenu.imagePath)) },
     { label: 'Reprocess faces', icon: UserCircle, enabled: false },
     { label: 'Rename', icon: Pencil, enabled: false },
     { label: 'Add to favorites', icon: Heart, enabled: false },
@@ -31,17 +38,17 @@ export const ContextMenu = () => {
     <div
       ref={ref}
       style={{ top: contextMenu.y, left: contextMenu.x }}
-      className="fixed z-[60] w-52 bg-surface-hi border border-border rounded-xl shadow-2xl shadow-black/40 p-1.5 flex flex-col gap-0.5 origin-top-left animate-[ctxmenu_250ms_cubic-bezier(0.32,0.72,0,1)]"
+      className="fixed z-[60] w-52 bg-surface-hi border border-border rounded-xl shadow-2xl shadow-black/40 p-1.5 flex flex-col gap-0.5 origin-top-left animate-[ctxmenu_200ms_cubic-bezier(0.32,0.72,0,1)]"
       onClick={(e) => e.stopPropagation()}
     >
-      <style>{`@keyframes ctxmenu { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }`}</style>
+      <style>{`@keyframes ctxmenu { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }`}</style>
       {items.map((item) => (
         <button
           key={item.label}
           disabled={!item.enabled}
           onClick={() => { item.onClick?.(); setContextMenu(null); }}
           title={item.enabled ? undefined : 'Coming soon'}
-          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-left transition-colors duration-250 ease-apple ${
+          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-left transition-colors duration-150 ${
             item.enabled ? 'text-text hover:bg-surface' : 'text-text-mute cursor-not-allowed opacity-50'
           }`}
         >
