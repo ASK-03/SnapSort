@@ -26,6 +26,9 @@ interface AppState {
   setShowRightSidebar: (show: boolean) => void;
 
 
+  selectedPerson: { id: number; name: string } | null;
+  setSelectedPerson: (person: { id: number; name: string } | null) => void;
+
   stats: { photos: number; faces: number; people: number };
   setStats: (stats: { photos: number; faces: number; people: number }) => void;
 }
@@ -53,6 +56,9 @@ export const useAppStore = create<AppState>((set) => ({
   showRightSidebar: false,
   setShowRightSidebar: (showRightSidebar) => set({ showRightSidebar }),
 
+
+  selectedPerson: null,
+  setSelectedPerson: (selectedPerson) => set({ selectedPerson }),
 
   stats: { photos: 0, faces: 0, people: 0 },
   setStats: (stats) => set({ stats }),

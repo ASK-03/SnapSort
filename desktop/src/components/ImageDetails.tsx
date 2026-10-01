@@ -4,7 +4,7 @@ import { getImageUrl, getFaceThumbnailUrl, api } from '../api';
 import { X, ChevronRight, UserCircle2 } from 'lucide-react';
 
 export const ImageDetails = () => {
-  const { selectedImage, showRightSidebar, setShowRightSidebar, setSearchQuery, setLightboxImage } = useAppStore();
+  const { selectedImage, showRightSidebar, setShowRightSidebar, setSelectedPerson, setViewMode, setLightboxImage } = useAppStore();
   const [faces, setFaces] = useState<{id: number, name: string | null}[]>([]);
   const [loadingFaces, setLoadingFaces] = useState(false);
   const [selectedFaceId, setSelectedFaceId] = useState<number | null>(null);
@@ -103,7 +103,8 @@ export const ImageDetails = () => {
                     onClick={() => {
                       setSelectedFaceId(face.id);
                       setNameInput(face.name || '');
-                      setSearchQuery(`face:${face.id}`);
+                      setSelectedPerson({ id: face.id, name: face.name || `Person ${face.id}` });
+                      setViewMode('people');
                     }}
                   >
                     <img src={getFaceThumbnailUrl(face.id)} className="w-full h-full object-cover" alt={`Face ${face.id}`} />
