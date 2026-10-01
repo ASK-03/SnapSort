@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export const Sidebar = () => {
-  const { viewMode, setViewMode, isScanning, setIsScanning, progress, stats } = useAppStore();
+  const { viewMode, setViewMode, setSelectedPerson, isScanning, setIsScanning, progress, stats } = useAppStore();
 
   const handleSelectFolder = async () => {
     // @ts-ignore
@@ -58,7 +58,7 @@ export const Sidebar = () => {
           return (
             <button
               key={item.id}
-              onClick={() => setViewMode(item.id as any)}
+              onClick={() => { setSelectedPerson(null); setViewMode(item.id as any); }}
               className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors ${
                 isActive 
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
@@ -83,7 +83,7 @@ export const Sidebar = () => {
           return (
             <button
               key={item.id}
-              onClick={() => setViewMode(item.id as any)}
+              onClick={() => { setSelectedPerson(null); setViewMode(item.id as any); }}
               className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl transition-colors ${
                 isActive 
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 

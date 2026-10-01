@@ -6,13 +6,14 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { Gallery } from './components/Gallery';
 import { Faces } from './components/Faces';
+import { PersonView } from './components/PersonView';
 import { ImageDetails } from './components/ImageDetails';
 import { Lightbox } from './components/Lightbox';
 import { Settings } from './components/Settings';
 import { About } from './components/About';
 
 function App() {
-  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, setStats, viewMode, setViewMode, theme } = useAppStore();
+  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, setStats, viewMode, setViewMode, theme, selectedPerson } = useAppStore();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -116,7 +117,8 @@ function App() {
           
           <div className="flex-1 flex overflow-hidden">
             {viewMode === 'photos' && <Gallery />}
-            {(viewMode === 'faces' || viewMode === 'people') && <Faces />}
+            {viewMode === 'people' && selectedPerson && <PersonView />}
+            {(viewMode === 'faces' || (viewMode === 'people' && !selectedPerson)) && <Faces />}
             {viewMode === 'settings' && <Settings />}
             {viewMode === 'about' && <About />}
             
