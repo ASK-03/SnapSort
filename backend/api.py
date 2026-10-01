@@ -186,11 +186,15 @@ def _resolve_indexed_path(path: str) -> str:
     missing every symlinked library.
     """
     db = controller().db
-    if db.get_image_id(path) is not None:
-        return path
-    real_path = os.path.realpath(path)
-    if db.get_image_id(real_path) is not None:
-        return real_path
+    for candidate in (path, os.path.realpath(path)):
+        if db.get_image_id(candidate) is None:
+            continue
+        # Indexed but gone from disk: an unplugged external drive or a file
+        # moved outside SnapSort. 404 here rather than letting the caller
+        # fail deeper with a misleading 422 + error log per tile.
+        if not os.path.exists(candidate):
+            raise HTTPException(status_code=404, detail="File unavailable (moved or drive not mounted)")
+        return candidate
     raise HTTPException(status_code=404, detail="Image not found")
 
 # Formats Chromium's <img> can't decode natively — serve a JPEG transcode instead of raw bytes.
