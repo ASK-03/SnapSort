@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
@@ -343,6 +344,153 @@ async def save_edited_image(req: SaveEditRequest):
         logger.error("Failed to save edited image %s: %s", real_path, exc)
         raise HTTPException(status_code=422, detail="Could not save edited photo")
     return {"status": "ok", "saved_path": saved_path, "mode": req.mode}
+
+
+def _to_float(val) -> float | None:
+    if val is None:
+        return None
+    try:
+        if isinstance(val, tuple) and len(val) == 2:
+            num, den = val
+            return float(num) / float(den) if den else None
+        return float(val)
+    except Exception:
+        return None
+
+
+def _decode_gps_coord(dms, ref) -> float | None:
+    if not isinstance(dms, (tuple, list)) or len(dms) != 3:
+        return None
+    d = _to_float(dms[0])
+    m = _to_float(dms[1])
+    s = _to_float(dms[2])
+    if d is None or m is None or s is None:
+        return None
+    dec = d + m / 60.0 + s / 3600.0
+    if isinstance(ref, bytes):
+        ref = ref.decode("ascii", errors="ignore")
+    if isinstance(ref, str) and ref.upper() in ("S", "W"):
+        dec = -abs(dec)
+    return round(dec, 5)
+
+
+def _extract_image_metadata(real_path: str) -> dict[str, object]:
+    stat = os.stat(real_path)
+    modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _, ext = os.path.splitext(real_path)
+    ext_fmt = ext.lstrip(".").upper() or "UNKNOWN"
+
+    date_taken: str | None = None
+    camera: str | None = None
+    lens: str | None = None
+    focal_length: str | None = None
+    aperture: str | None = None
+    shutter_speed: str | None = None
+    iso: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    location_label: str | None = None
+
+    with Image.open(real_path) as img:
+        fmt = (img.format or ext_fmt).upper()
+        width, height = img.size
+        exif = img.getexif()
+
+        orientation = exif.get(274)
+        if orientation in (5, 6, 7, 8):
+            width, height = height, width
+
+        make = str(exif.get(271) or "").strip()
+        model = str(exif.get(272) or "").strip()
+        if model and make and model.lower().startswith(make.lower()):
+            camera = model
+        elif make or model:
+            camera = f"{make} {model}".strip()
+
+        base_date = str(exif.get(306) or "").strip() or None
+
+        try:
+            exif_ifd = exif.get_ifd(0x8769)
+        except Exception:
+            exif_ifd = {}
+
+        raw_dto = str(exif_ifd.get(36867) or "").strip() if exif_ifd else ""
+        date_taken = raw_dto or base_date
+        if exif_ifd:
+            lens_raw = exif_ifd.get(42036)
+            if lens_raw:
+                lens = str(lens_raw).strip() or None
+
+            fl = _to_float(exif_ifd.get(37386))
+            if fl is not None and fl > 0:
+                focal_length = f"{fl:g} mm"
+
+            fn = _to_float(exif_ifd.get(33437))
+            if fn is not None and fn > 0:
+                aperture = f"f/{fn:g}"
+
+            exp = _to_float(exif_ifd.get(33434))
+            if exp is not None and exp > 0:
+                if exp < 1.0:
+                    denom = max(1, int(round(1.0 / exp)))
+                    shutter_speed = f"1/{denom} s"
+                else:
+                    shutter_speed = f"{exp:g} s"
+
+            iso_raw = exif_ifd.get(34855) or exif_ifd.get(34867)
+            if isinstance(iso_raw, (tuple, list)) and iso_raw:
+                iso_raw = iso_raw[0]
+            if iso_raw is not None:
+                try:
+                    iso = int(iso_raw)
+                except Exception:
+                    iso = None
+
+        try:
+            gps_ifd = exif.get_ifd(0x8825)
+        except Exception:
+            gps_ifd = {}
+
+        if gps_ifd:
+            latitude = _decode_gps_coord(gps_ifd.get(2), gps_ifd.get(1))
+            longitude = _decode_gps_coord(gps_ifd.get(4), gps_ifd.get(3))
+            if latitude is not None and longitude is not None:
+                lat_hem = "N" if latitude >= 0 else "S"
+                lon_hem = "E" if longitude >= 0 else "W"
+                location_label = f"{abs(latitude):.5f}° {lat_hem}, {abs(longitude):.5f}° {lon_hem}"
+
+    megapixels = round((width * height) / 1_000_000, 1) if width and height else 0.0
+    return {
+        "filename": os.path.basename(real_path),
+        "path": real_path,
+        "format": fmt,
+        "width": width,
+        "height": height,
+        "megapixels": megapixels,
+        "file_size_bytes": stat.st_size,
+        "modified_at": modified_at,
+        "date_taken": date_taken,
+        "camera": camera,
+        "lens": lens,
+        "focal_length": focal_length,
+        "aperture": aperture,
+        "shutter_speed": shutter_speed,
+        "iso": iso,
+        "latitude": latitude,
+        "longitude": longitude,
+        "location_label": location_label,
+    }
+
+
+@app.get("/api/images/metadata")
+async def get_image_metadata(path: str):
+    """Return file dimensions, EXIF camera settings, and GPS coordinates for an indexed image."""
+    real_path = _resolve_indexed_path(path)
+    try:
+        return await asyncio.to_thread(_extract_image_metadata, real_path)
+    except Exception as exc:
+        logger.error("Failed to read metadata for %s: %s", real_path, exc)
+        raise HTTPException(status_code=422, detail="Could not inspect photo metadata")
 
 
 @app.get("/api/faces")
