@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveMcpPolicy: (policy: Record<string, unknown>) => ipcRenderer.invoke('mcp:savePolicy', policy),
   addMcpApprovedFolder: () => ipcRenderer.invoke('mcp:addApprovedFolder'),
   getMcpClientConfig: () => ipcRenderer.invoke('mcp:getClientConfig'),
+  listMcpClients: () => ipcRenderer.invoke('mcp:listClients'),
+  connectMcpClient: (clientId: string) => ipcRenderer.invoke('mcp:connectClient', clientId),
+  disconnectMcpClient: (clientId: string) => ipcRenderer.invoke('mcp:disconnectClient', clientId),
   getMcpAuditLog: () => ipcRenderer.invoke('mcp:getAuditLog'),
   stopMcpHeadless: () => ipcRenderer.invoke('mcp:stopHeadless'),
 })

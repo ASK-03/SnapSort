@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
-import type { McpAuditEntry, McpPolicy } from '../electron';
-import { Bot, Check, Copy, Cpu, Plus, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react';
+import type { McpAuditEntry, McpClientId, McpClientStatus, McpPolicy } from '../electron';
+import { Bot, Check, Copy, Cpu, Plug, Plus, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react';
 
 const ToggleRow = ({
   title,
@@ -52,20 +52,24 @@ export const Settings = () => {
   const { viewMode } = useAppStore();
   const [policy, setPolicy] = useState<McpPolicy | null>(null);
   const [clientConfig, setClientConfig] = useState<string>('');
+  const [clients, setClients] = useState<McpClientStatus[]>([]);
+  const [clientNotice, setClientNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [auditEntries, setAuditEntries] = useState<McpAuditEntry[]>([]);
   const [copied, setCopied] = useState(false);
 
   const refreshMcpState = async () => {
     if (!window.electronAPI?.getMcpPolicy) return;
     try {
-      const [pol, cfg, audit] = await Promise.all([
+      const [pol, cfg, audit, detected] = await Promise.all([
         window.electronAPI.getMcpPolicy(),
         window.electronAPI.getMcpClientConfig(),
         window.electronAPI.getMcpAuditLog(),
+        window.electronAPI.listMcpClients ? window.electronAPI.listMcpClients() : Promise.resolve([]),
       ]);
       setPolicy(pol);
       setClientConfig(cfg.configJson);
       setAuditEntries(audit);
+      setClients(detected);
     } catch (err) {
       console.error('Failed to load MCP settings:', err);
     }
@@ -96,6 +100,35 @@ export const Settings = () => {
     await updatePolicy({
       approved_roots: policy.approved_roots.filter((r) => r !== folder),
     });
+  };
+
+  const handleConnectClient = async (client: McpClientStatus) => {
+    if (!window.electronAPI?.connectMcpClient) return;
+    const res = await window.electronAPI.connectMcpClient(client.id);
+    setClients(res.clients);
+    setPolicy(res.policy);
+    if (res.result.ok) {
+      setClientNotice({
+        kind: 'ok',
+        text: `Connected ${client.name} (${res.result.configPath}). Restart ${client.name} to load SnapSort tools.`,
+      });
+    } else {
+      setClientNotice({
+        kind: 'error',
+        text: res.result.error || `Failed to connect ${client.name}.`,
+      });
+    }
+  };
+
+  const handleDisconnectClient = async (clientId: McpClientId, name: string) => {
+    if (!window.electronAPI?.disconnectMcpClient) return;
+    const res = await window.electronAPI.disconnectMcpClient(clientId);
+    setClients(res.clients);
+    if (res.result.ok) {
+      setClientNotice({ kind: 'ok', text: `Disconnected SnapSort from ${name}.` });
+    } else {
+      setClientNotice({ kind: 'error', text: res.result.error || `Failed to disconnect ${name}.` });
+    }
   };
 
   const handleCopyConfig = async () => {
@@ -249,6 +282,81 @@ export const Settings = () => {
                     </ul>
                   )}
                 </div>
+
+                {clients.length > 0 && (
+                  <div className="border-t border-border pt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Plug size={15} className="text-accent" aria-hidden="true" />
+                      <h3 className="text-text font-medium text-sm">Quick Connect AI Clients</h3>
+                    </div>
+                    <p className="text-xs text-text-mute mb-3">
+                      Automatically register SnapSort in your installed MCP clients (backs up existing configs first).
+                    </p>
+
+                    {clientNotice && (
+                      <div
+                        role="status"
+                        className={`mb-3 p-2.5 rounded-lg text-xs border ${
+                          clientNotice.kind === 'ok'
+                            ? 'bg-surface-hi border-success/40 text-success'
+                            : 'bg-danger/10 border-danger/40 text-danger'
+                        }`}
+                      >
+                        {clientNotice.text}
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      {clients.map((client) => (
+                        <div
+                          key={client.id}
+                          className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-surface-hi border border-border"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-text">{client.name}</span>
+                              {client.connected ? (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface border border-border text-success font-medium">
+                                  {client.upToDate ? 'Connected' : 'Update Available'}
+                                </span>
+                              ) : client.installed ? (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-accent-soft text-accent font-medium">
+                                  Detected
+                                </span>
+                              ) : (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface border border-border text-text-mute font-medium">
+                                  Not detected
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] font-mono text-text-mute truncate mt-0.5">{client.configPath}</p>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {(!client.connected || !client.upToDate) && (
+                              <button
+                                type="button"
+                                onClick={() => void handleConnectClient(client)}
+                                className="pressable bg-accent hover:opacity-95 text-on-accent px-2.5 py-1 rounded-md text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                {client.connected ? 'Update' : 'Connect'}
+                              </button>
+                            )}
+                            {client.connected && (
+                              <button
+                                type="button"
+                                onClick={() => void handleDisconnectClient(client.id, client.name)}
+                                className="pressable bg-surface border border-border text-text-dim hover:text-danger px-2.5 py-1 rounded-md text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                Disconnect
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {clientConfig && (
                   <div className="border-t border-border pt-4">

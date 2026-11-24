@@ -6,6 +6,13 @@ import crypto from 'crypto'
 import http from 'http'
 import net from 'net'
 import * as fs from 'fs'
+import {
+  connectMcpClient,
+  detectMcpClients,
+  disconnectMcpClient,
+  type McpClientId,
+  type McpServerEntry,
+} from './mcpClients'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const APP_VERSION = '3.1.0'
@@ -369,43 +376,44 @@ async function waitForBackendReady(timeoutMs = 15000): Promise<void> {
   }
 }
 
-function buildClientConfig(): { configJson: string; isPackaged: boolean; dataDir: string } {
+function getMcpServerEntry(): McpServerEntry {
   const dataDir = getDataDir()
   const modelsDir = getModelsDir()
   if (app.isPackaged) {
     const isWin = process.platform === 'win32'
     const adapterBin = path.join(process.resourcesPath, 'backend', isWin ? 'mcp_server.exe' : 'mcp_server')
     const backendBin = path.join(process.resourcesPath, 'backend', isWin ? 'api.exe' : 'api')
-    const cfg = {
-      mcpServers: {
-        snapsort: {
-          command: adapterBin,
-          args: [
-            '--data-dir', dataDir,
-            '--models-dir', modelsDir,
-            '--backend-bin', backendBin,
-          ],
-        },
-      },
+    return {
+      command: adapterBin,
+      args: [
+        '--data-dir', dataDir,
+        '--models-dir', modelsDir,
+        '--backend-bin', backendBin,
+      ],
     }
-    return { configJson: JSON.stringify(cfg, null, 2), isPackaged: true, dataDir }
   }
 
   const repoRoot = path.resolve(__dirname, '../../')
+  return {
+    command: 'uv',
+    args: [
+      '--directory', repoRoot,
+      'run', 'python', 'backend/mcp_server.py',
+      '--data-dir', dataDir,
+      '--models-dir', modelsDir,
+    ],
+  }
+}
+
+function buildClientConfig(): { configJson: string; isPackaged: boolean; dataDir: string } {
+  const dataDir = getDataDir()
+  const entry = getMcpServerEntry()
   const cfg = {
     mcpServers: {
-      snapsort: {
-        command: 'uv',
-        args: [
-          '--directory', repoRoot,
-          'run', 'python', 'backend/mcp_server.py',
-          '--data-dir', dataDir,
-          '--models-dir', modelsDir,
-        ],
-      },
+      snapsort: entry,
     },
   }
-  return { configJson: JSON.stringify(cfg, null, 2), isPackaged: false, dataDir }
+  return { configJson: JSON.stringify(cfg, null, 2), isPackaged: app.isPackaged, dataDir }
 }
 
 type WindowTheme = 'light' | 'dark' | 'viewer' | 'viewerLight'
@@ -548,6 +556,29 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('mcp:getClientConfig', () => buildClientConfig())
+  ipcMain.handle('mcp:listClients', () => detectMcpClients(getMcpServerEntry()))
+  ipcMain.handle('mcp:connectClient', async (_event, clientId: McpClientId) => {
+    const entry = getMcpServerEntry()
+    const result = connectMcpClient(clientId, entry)
+    let policy = loadPolicy()
+    if (result.ok && !policy.mcp_enabled) {
+      policy = savePolicy({ ...policy, mcp_enabled: true })
+      await backendHttpJson(backendPort, backendToken, 'POST', '/api/mcp/policy/sync')
+    }
+    return {
+      result,
+      clients: detectMcpClients(entry),
+      policy,
+    }
+  })
+  ipcMain.handle('mcp:disconnectClient', (_event, clientId: McpClientId) => {
+    const entry = getMcpServerEntry()
+    const result = disconnectMcpClient(clientId)
+    return {
+      result,
+      clients: detectMcpClients(entry),
+    }
+  })
 
   ipcMain.handle('mcp:getAuditLog', () => {
     const auditPath = getAuditFilePath()
