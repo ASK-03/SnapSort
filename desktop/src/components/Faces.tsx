@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Users, Check, Merge, Pencil, X } from 'lucide-react';
+import { Users, Check, Merge, Pencil } from 'lucide-react';
 import { useAppStore } from '../store';
 import { getFaceThumbnailUrl, api, scanFolder } from '../api';
 import { withViewTransition } from '../lib/viewTransition';
@@ -114,7 +114,7 @@ const FaceClusterCard = ({
 
       <div className="p-2 flex flex-col gap-1 min-w-0">
         {editing ? (
-          <div className="flex items-center gap-1 min-w-0">
+          <div className="flex flex-col gap-1.5 min-w-0">
             <input
               type="text"
               autoFocus
@@ -133,29 +133,31 @@ const FaceClusterCard = ({
                   setEditing(false);
                 }
               }}
-              className="flex-1 min-w-0 bg-bg border border-accent rounded-md px-1.5 py-0.5 text-xs text-text focus:outline-none placeholder:text-text-mute"
+              className="w-full bg-bg border border-accent rounded-md px-2 py-1 text-xs text-text focus:outline-none placeholder:text-text-mute"
             />
-            <button
-              type="button"
-              aria-label="Save name"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => void commit()}
-              className="pressable w-6 h-6 rounded-md bg-accent text-on-accent grid place-items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Check size={12} />
-            </button>
-            <button
-              type="button"
-              aria-label="Cancel rename"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                setName(face.name || '');
-                setEditing(false);
-              }}
-              className="pressable w-6 h-6 rounded-md bg-surface-hi border border-border text-text-mute hover:text-text grid place-items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <X size={12} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-label="Save name"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void commit()}
+                className="pressable flex-1 py-1 rounded-md bg-accent text-on-accent text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                aria-label="Cancel rename"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setName(face.name || '');
+                  setEditing(false);
+                }}
+                className="pressable flex-1 py-1 rounded-md bg-surface-hi border border-border text-text-dim hover:text-text text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         ) : face.name ? (
           <div className="flex items-center justify-between gap-1 min-w-0">
@@ -186,9 +188,11 @@ const FaceClusterCard = ({
             <span className="truncate">Add name</span>
           </button>
         )}
-        <span className="text-xs text-text-mute tabular-nums px-0.5">
-          {face.count !== undefined ? pluralPhotos(face.count) : `Cluster #${face.id}`}
-        </span>
+        {!editing && (
+          <span className="text-xs text-text-mute tabular-nums px-0.5">
+            {face.count !== undefined ? pluralPhotos(face.count) : `Cluster #${face.id}`}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -336,7 +340,7 @@ export const Faces = () => {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2.5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(136px,1fr))] gap-3">
             {displayFaces.map((face) => (
               <FaceClusterCard
                 key={face.id}
