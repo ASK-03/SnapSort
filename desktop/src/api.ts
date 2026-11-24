@@ -43,6 +43,33 @@ export const getImagesForFace = async (faceId: number) => {
   return data.images || [];
 };
 
+export type FilterPreset = 'original' | 'vivid' | 'warm' | 'cool' | 'mono' | 'noir';
+
+export interface SaveEditPayload {
+  source_path: string;
+  mode: 'copy' | 'replace';
+  crop?: { x: number; y: number; w: number; h: number } | null;
+  rotate_deg: number;
+  flip_h: boolean;
+  flip_v: boolean;
+  straighten_deg: number;
+  filter_preset: FilterPreset;
+  adjustments: {
+    light: number;
+    contrast: number;
+    saturation: number;
+    warmth: number;
+  };
+}
+
+export const saveEditedImage = async (payload: SaveEditPayload) => {
+  const { data } = await api.post<{ status: string; saved_path: string; mode: 'copy' | 'replace' }>(
+    '/images/save-copy',
+    payload,
+  );
+  return data;
+};
+
 export const getImageUrl = (path: string) => `${BASE_URL}/media/image?path=${encodeURIComponent(path)}`;
 export const getPreviewUrl = (path: string) => `${BASE_URL}/media/preview?path=${encodeURIComponent(path)}`;
 export const getFaceThumbnailUrl = (faceId: number) => `${BASE_URL}/media/thumbnail/${faceId}`;

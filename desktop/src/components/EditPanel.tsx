@@ -1,101 +1,338 @@
-import { useEffect, useState } from 'react';
-import { Crop, RotateCcw, SlidersHorizontal, Undo2 } from 'lucide-react';
-import { useAppStore } from '../store';
+import {
+  Crop,
+  FlipHorizontal,
+  FlipVertical,
+  RotateCcw,
+  RotateCw,
+  SlidersHorizontal,
+  Sparkles,
+  Sun,
+} from 'lucide-react';
+import {
+  CROP_ASPECTS,
+  DEFAULT_ADJUSTMENTS,
+  DEFAULT_CROP,
+  FILTER_PRESETS,
+  computeCropForAspect,
+  isEditDirty,
+  type CropAspect,
+  type EditAdjustments,
+  type EditState,
+} from '../lib/editor';
 
-interface Adjustments { brightness: number; contrast: number; saturation: number; warmth: number }
-const DEFAULT_ADJUSTMENTS: Adjustments = { brightness: 0, contrast: 0, saturation: 0, warmth: 0 };
+interface EditPanelProps {
+  open: boolean;
+  state: EditState;
+  saveMode: 'copy' | 'replace';
+  imageAspect: number;
+  isSaving: boolean;
+  statusMessage: string | null;
+  errorMessage: string | null;
+  onChange: (updater: (prev: EditState) => EditState) => void;
+  onResetAll: () => void;
+  onCancel: () => void;
+  onSaveCopy: () => void;
+}
 
-const toCssFilter = (a: Adjustments) =>
-  `brightness(${1 + a.brightness / 100}) contrast(${1 + a.contrast / 100}) saturate(${1 + a.saturation / 100}) sepia(${Math.max(0, a.warmth) / 200})`;
+const TOOL_TITLES: Record<EditState['tool'], string> = {
+  crop: 'Crop',
+  adjust: 'Adjust',
+  filters: 'Filters',
+  rotate: 'Rotate',
+};
 
-export const EditPanel = ({ open, onFilterChange }: { open: boolean; onFilterChange: (cssFilter: string) => void }) => {
-  const setViewerPanel = useAppStore((s) => s.setViewerPanel);
-  const [tool, setTool] = useState<'crop' | 'rotate' | 'adjust'>('adjust');
-  const [adjustments, setAdjustments] = useState<Adjustments>(DEFAULT_ADJUSTMENTS);
+const ADJUST_ROWS: { key: keyof EditAdjustments; label: string }[] = [
+  { key: 'light', label: 'Light' },
+  { key: 'contrast', label: 'Contrast' },
+  { key: 'saturation', label: 'Saturation' },
+  { key: 'warmth', label: 'Warmth' },
+];
 
-  useEffect(() => {
-    onFilterChange(tool === 'adjust' ? toCssFilter(adjustments) : toCssFilter(DEFAULT_ADJUSTMENTS));
-  }, [adjustments, tool]);
+export const EditPanel = ({
+  open,
+  state,
+  saveMode,
+  imageAspect,
+  isSaving,
+  statusMessage,
+  errorMessage,
+  onChange,
+  onResetAll,
+  onCancel,
+  onSaveCopy,
+}: EditPanelProps) => {
+  const dirty = isEditDirty(state);
 
-  const set = (key: keyof Adjustments) => (v: number) =>
-    setAdjustments((prev) => ({ ...prev, [key]: v }));
+  const setAspect = (aspect: CropAspect) => {
+    const nextCrop = computeCropForAspect(aspect, imageAspect);
+    onChange((prev) => ({ ...prev, aspect, crop: nextCrop }));
+  };
 
-  const tools = [
-    { id: 'crop' as const, icon: Crop, enabled: false },
-    { id: 'rotate' as const, icon: RotateCcw, enabled: false },
-    { id: 'adjust' as const, icon: SlidersHorizontal, enabled: true },
-  ];
-
-  const done = () => setViewerPanel('none');
-  const cancel = () => { setAdjustments(DEFAULT_ADJUSTMENTS); setViewerPanel('none'); };
-
-  const flyoutOpen = open && tool === 'adjust';
-  const totalWidth = (open ? 64 : 0) + (flyoutOpen ? 224 : 0);
+  const resetActiveTool = () => {
+    onChange((prev) => {
+      if (prev.tool === 'crop') return { ...prev, aspect: 'free', crop: { ...DEFAULT_CROP } };
+      if (prev.tool === 'adjust') return { ...prev, adjustments: { ...DEFAULT_ADJUSTMENTS } };
+      if (prev.tool === 'filters') return { ...prev, filterPreset: 'original' };
+      return { ...prev, rotateDeg: 0, flipH: false, flipV: false, straightenDeg: 0 };
+    });
+  };
 
   return (
-    <div
-      className="h-full flex flex-shrink-0 overflow-hidden transition-[width] duration-320 ease-apple"
-      style={{ width: totalWidth }}
+    <aside
+      aria-label="Photo editor"
+      aria-hidden={!open}
+      inert={!open}
+      className={`w-80 h-full bg-viewer-panel border-l border-border flex flex-col justify-between overflow-y-auto overscroll-contain transition-[transform,opacity] ease-drawer motion-reduce:transition-none ${
+        open ? 'translate-x-0 opacity-100 duration-240' : 'translate-x-full opacity-0 pointer-events-none duration-150'
+      }`}
     >
-      <div className="w-16 flex-shrink-0 bg-[#141517] border-r border-white/10 flex flex-col items-center pt-[76px] gap-1.5">
-        {tools.map((t) => (
-          <button
-            key={t.id}
-            disabled={!t.enabled}
-            title={t.enabled ? undefined : 'Coming soon'}
-            onClick={() => t.enabled && setTool(t.id)}
-            className={`w-10 h-10 rounded-[10px] flex items-center justify-center transition-colors duration-150 ${
-              tool === t.id && t.enabled
-                ? 'bg-accent/15 border border-accent/40 text-accent'
-                : t.enabled ? 'text-white/60 hover:bg-white/5' : 'text-white/25 cursor-not-allowed'
-            }`}
-          >
-            <t.icon size={17} />
-          </button>
-        ))}
-        <button
-          onClick={() => setAdjustments(DEFAULT_ADJUSTMENTS)}
-          title="Revert"
-          className="mt-auto mb-4 w-10 h-10 rounded-[10px] flex items-center justify-center text-white/40 hover:bg-white/5 transition-colors duration-150"
-        >
-          <Undo2 size={16} />
-        </button>
-      </div>
+      <div className="p-5 flex flex-col gap-5 text-text">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {state.tool === 'crop' && <Crop size={15} className="text-text-dim" aria-hidden="true" />}
+            {state.tool === 'adjust' && <Sun size={15} className="text-text-dim" aria-hidden="true" />}
+            {state.tool === 'filters' && <Sparkles size={15} className="text-text-dim" aria-hidden="true" />}
+            {state.tool === 'rotate' && <RotateCw size={15} className="text-text-dim" aria-hidden="true" />}
+            <span className="text-sm font-semibold text-text">{TOOL_TITLES[state.tool]}</span>
+          </div>
 
-      <div className="w-[224px] flex-shrink-0 bg-[#1A1B1E] border-r border-white/10 pt-[76px] px-4 pb-4 flex flex-col gap-4 text-white">
-        <span className="text-[10.5px] font-bold tracking-wide text-white/45">ADJUST</span>
-        <Slider label="Brightness" value={adjustments.brightness} onChange={set('brightness')} />
-        <Slider label="Contrast" value={adjustments.contrast} onChange={set('contrast')} />
-        <Slider label="Saturation" value={adjustments.saturation} onChange={set('saturation')} />
-        <Slider label="Warmth" value={adjustments.warmth} onChange={set('warmth')} />
-        <div className="flex gap-2 mt-1">
-          <button onClick={cancel} className="flex-1 py-1.5 rounded-lg border border-white/15 text-[12.5px] font-semibold text-white/80 hover:bg-white/5 transition-colors duration-150">
-            Cancel
-          </button>
-          <button onClick={done} className="flex-1 py-1.5 rounded-lg bg-accent text-[12.5px] font-semibold text-[#141517] hover:brightness-110 transition-all duration-150">
-            Done
+          <button
+            type="button"
+            onClick={resetActiveTool}
+            title={`Reset ${TOOL_TITLES[state.tool].toLowerCase()}`}
+            aria-label={`Reset ${TOOL_TITLES[state.tool].toLowerCase()}`}
+            className="pressable w-7 h-7 rounded-md grid place-items-center text-text-mute hover:text-text hover:bg-surface-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <RotateCcw size={13} />
           </button>
         </div>
+
+        {state.tool === 'adjust' && (
+          <div className="space-y-4">
+            {ADJUST_ROWS.map((row) => (
+              <CenteredSlider
+                key={row.key}
+                label={row.label}
+                value={state.adjustments[row.key]}
+                min={-50}
+                max={50}
+                onChange={(val) =>
+                  onChange((prev) => ({
+                    ...prev,
+                    adjustments: { ...prev.adjustments, [row.key]: val },
+                  }))
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        {state.tool === 'crop' && (
+          <div className="space-y-4">
+            <div>
+              <span className="block text-xs font-medium text-text-mute mb-2">Aspect ratio</span>
+              <div className="grid grid-cols-5 gap-1.5">
+                {CROP_ASPECTS.map((item) => {
+                  const active = state.aspect === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setAspect(item.id)}
+                      aria-pressed={active}
+                      className={`pressable py-1.5 rounded-lg text-xs font-medium border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                        active
+                          ? 'bg-accent text-on-accent border-accent'
+                          : 'bg-surface border-border text-text-dim hover:text-text hover:bg-surface-hi'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-surface border border-border p-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-text-mute">Selection</span>
+                <span className="text-text font-medium tabular-nums">
+                  {Math.round(state.crop.w * 100)}% x {Math.round(state.crop.h * 100)}%
+                </span>
+              </div>
+              <p className="text-xs text-text-mute leading-relaxed">
+                Drag any corner or frame edge on the photo to trim the composition.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {state.tool === 'filters' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {FILTER_PRESETS.map((preset) => {
+                const active = state.filterPreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => onChange((prev) => ({ ...prev, filterPreset: preset.id }))}
+                    aria-pressed={active}
+                    className={`pressable px-3 py-2 rounded-lg text-left text-xs font-medium border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                      active
+                        ? 'bg-accent-soft text-accent border-accent'
+                        : 'bg-surface border-border text-text-dim hover:text-text hover:bg-surface-hi'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-text-mute leading-relaxed">
+              Use the thumbnail strip under the photo or switch to Adjust to fine-tune lighting and color.
+            </p>
+          </div>
+        )}
+
+        {state.tool === 'rotate' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onChange((prev) => ({ ...prev, rotateDeg: (prev.rotateDeg + 270) % 360 }))}
+                className="pressable flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-surface hover:bg-surface-hi border border-border text-xs font-medium text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <RotateCcw size={14} />
+                90 deg Left
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange((prev) => ({ ...prev, rotateDeg: (prev.rotateDeg + 90) % 360 }))}
+                className="pressable flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-surface hover:bg-surface-hi border border-border text-xs font-medium text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <RotateCw size={14} />
+                90 deg Right
+              </button>
+              <button
+                type="button"
+                aria-pressed={state.flipH}
+                onClick={() => onChange((prev) => ({ ...prev, flipH: !prev.flipH }))}
+                className={`pressable flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  state.flipH
+                    ? 'bg-accent-soft text-accent border-accent'
+                    : 'bg-surface hover:bg-surface-hi border-border text-text'
+                }`}
+              >
+                <FlipHorizontal size={14} />
+                Flip Horiz
+              </button>
+              <button
+                type="button"
+                aria-pressed={state.flipV}
+                onClick={() => onChange((prev) => ({ ...prev, flipV: !prev.flipV }))}
+                className={`pressable flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  state.flipV
+                    ? 'bg-accent-soft text-accent border-accent'
+                    : 'bg-surface hover:bg-surface-hi border-border text-text'
+                }`}
+              >
+                <FlipVertical size={14} />
+                Flip Vert
+              </button>
+            </div>
+
+            <CenteredSlider
+              label="Straighten"
+              value={state.straightenDeg}
+              min={-45}
+              max={45}
+              suffix="deg"
+              onChange={(val) => onChange((prev) => ({ ...prev, straightenDeg: val }))}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="p-5 border-t border-border space-y-3">
+        <div className="rounded-xl bg-surface border border-border px-3.5 py-3 text-xs leading-relaxed text-text-dim">
+          {saveMode === 'replace'
+            ? 'Replace Original updates the indexed photo file in place while preserving EXIF details.'
+            : 'Saved next to the original, keeping its date and camera details.'}
+        </div>
+
+        {statusMessage && (
+          <p className="text-xs font-medium text-success" role="status">
+            {statusMessage}
+          </p>
+        )}
+        {errorMessage && (
+          <p className="text-xs font-medium text-danger" role="alert">
+            {errorMessage}
+          </p>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={dirty ? onResetAll : onCancel}
+            disabled={isSaving}
+            className="pressable flex-1 py-2 rounded-lg text-xs font-medium bg-surface hover:bg-surface-hi border border-border text-text disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {dirty ? 'Reset all' : 'Cancel'}
+          </button>
+          <button
+            type="button"
+            onClick={onSaveCopy}
+            disabled={isSaving || !dirty}
+            className="pressable flex-1 py-2 rounded-lg text-xs font-semibold bg-accent text-on-accent hover:opacity-95 disabled:opacity-45 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent inline-flex items-center justify-center gap-1.5"
+          >
+            <SlidersHorizontal size={12} />
+            {isSaving ? 'Saving...' : 'Save copy'}
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+};
+
+const CenteredSlider = ({
+  label,
+  value,
+  min,
+  max,
+  suffix = '',
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  suffix?: string;
+  onChange: (val: number) => void;
+}) => {
+  const display = value > 0 ? `+${value}${suffix}` : `${value}${suffix}`;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-text font-medium">{label}</span>
+        <span className="text-text-dim font-medium tabular-nums">{display}</span>
+      </div>
+      <div className="relative flex items-center h-5">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 -translate-x-1/2 w-[1.5px] h-2.5 bg-viewer-tick rounded-full"
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="relative z-10 w-full h-1 bg-viewer-track rounded-full appearance-none cursor-pointer accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        />
       </div>
     </div>
   );
 };
-
-const Slider = ({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) => (
-  <div className="flex flex-col gap-1.5">
-    <div className="flex justify-between text-[12px] text-white/80">
-      <span>{label}</span>
-      <span className={value !== 0 ? 'text-accent font-semibold' : 'text-white/45 font-semibold'}>
-        {value > 0 ? `+${value}` : value}
-      </span>
-    </div>
-    <input
-      type="range"
-      min={-50}
-      max={50}
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full accent-accent cursor-pointer"
-    />
-  </div>
-);
