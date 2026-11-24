@@ -16,7 +16,13 @@ export interface McpAuditEntry {
   error?: string | null;
 }
 
-export type McpClientId = 'claude-desktop' | 'cursor' | 'claude-code' | 'vscode';
+export type McpClientId =
+  | 'antigravity'
+  | 'antigravity-ide'
+  | 'claude-desktop'
+  | 'cursor'
+  | 'claude-code'
+  | 'vscode';
 
 export interface McpClientStatus {
   id: McpClientId;

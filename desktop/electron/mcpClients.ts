@@ -2,7 +2,13 @@ import * as fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-export type McpClientId = 'claude-desktop' | 'cursor' | 'claude-code' | 'vscode'
+export type McpClientId =
+  | 'antigravity'
+  | 'antigravity-ide'
+  | 'claude-desktop'
+  | 'cursor'
+  | 'claude-code'
+  | 'vscode'
 
 export interface McpServerEntry {
   command: string
@@ -37,11 +43,44 @@ interface ClientDef {
   name: string
   rootKey: 'mcpServers' | 'servers'
   needsTypeField: boolean
+  includeDisabledFalse?: boolean
   resolvePath: (home: string, platform: NodeJS.Platform, appData: string) => string
   detectInstalled: (configPath: string, home: string) => boolean
 }
 
 const CLIENT_DEFS: ClientDef[] = [
+  {
+    id: 'antigravity',
+    name: 'Antigravity / agy',
+    rootKey: 'mcpServers',
+    needsTypeField: false,
+    includeDisabledFalse: true,
+    resolvePath: (home) => {
+      const sharedCfg = path.join(home, '.gemini', 'config', 'mcp_config.json')
+      const legacyCfg = path.join(home, '.gemini', 'antigravity', 'mcp_config.json')
+      const hasSharedRoot =
+        fs.existsSync(path.join(home, '.gemini', 'config')) ||
+        fs.existsSync(path.join(home, '.gemini', 'antigravity-cli'))
+      if (!hasSharedRoot && fs.existsSync(path.join(home, '.gemini', 'antigravity'))) {
+        return legacyCfg
+      }
+      return sharedCfg
+    },
+    detectInstalled: (configPath, home) =>
+      fs.existsSync(configPath) ||
+      fs.existsSync(path.join(home, '.gemini', 'config')) ||
+      fs.existsSync(path.join(home, '.gemini', 'antigravity')) ||
+      fs.existsSync(path.join(home, '.gemini', 'antigravity-cli')),
+  },
+  {
+    id: 'antigravity-ide',
+    name: 'Antigravity IDE',
+    rootKey: 'mcpServers',
+    needsTypeField: false,
+    includeDisabledFalse: true,
+    resolvePath: (home) => path.join(home, '.gemini', 'antigravity-ide', 'mcp_config.json'),
+    detectInstalled: (configPath) => fs.existsSync(configPath) || fs.existsSync(path.dirname(configPath)),
+  },
   {
     id: 'claude-desktop',
     name: 'Claude Desktop',
@@ -127,27 +166,30 @@ function readJsonObject(configPath: string): { ok: true; data: Record<string, un
 }
 
 function writeJsonAtomic(configPath: string, data: Record<string, unknown>, platform: NodeJS.Platform): void {
-  const dir = path.dirname(configPath)
+  // Resolve symlinks so linked configs (e.g. antigravity/mcp_config.json -> config/mcp_config.json) stay linked
+  const targetPath = fs.existsSync(configPath) ? fs.realpathSync(configPath) : configPath
+  const dir = path.dirname(targetPath)
   fs.mkdirSync(dir, { recursive: true })
   const tmpPath = path.join(dir, `.tmp-snapsort-${process.pid}-${Date.now()}.json`)
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
-  fs.renameSync(tmpPath, configPath)
+  fs.renameSync(tmpPath, targetPath)
   if (platform !== 'win32') {
     try {
-      fs.chmodSync(configPath, 0o600)
+      fs.chmodSync(targetPath, 0o600)
     } catch {
       // ignore chmod errors
     }
   }
 }
 
-function entriesEqual(existing: unknown, expected: Record<string, unknown>): boolean {
+function entriesEqual(existing: unknown, expected: Record<string, unknown>, checkDisabled: boolean): boolean {
   if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
     return false
   }
   const obj = existing as Record<string, unknown>
   if (obj['command'] !== expected['command']) return false
   if (expected['type'] && obj['type'] !== expected['type']) return false
+  if (checkDisabled && obj['disabled'] === true) return false
   const existingArgs = Array.isArray(obj['args']) ? obj['args'] : null
   const expectedArgs = Array.isArray(expected['args']) ? expected['args'] : null
   if (!existingArgs || !expectedArgs || existingArgs.length !== expectedArgs.length) {
@@ -157,9 +199,13 @@ function entriesEqual(existing: unknown, expected: Record<string, unknown>): boo
 }
 
 function buildTargetEntry(def: ClientDef, serverEntry: McpServerEntry): Record<string, unknown> {
-  return def.needsTypeField
+  const entry: Record<string, unknown> = def.needsTypeField
     ? { type: 'stdio', command: serverEntry.command, args: [...serverEntry.args] }
     : { command: serverEntry.command, args: [...serverEntry.args] }
+  if (def.includeDisabledFalse) {
+    entry['disabled'] = false
+  }
+  return entry
 }
 
 export function detectMcpClients(serverEntry: McpServerEntry, envOpts?: McpEnvOptions): McpClientStatus[] {
@@ -178,7 +224,7 @@ export function detectMcpClients(serverEntry: McpServerEntry, envOpts?: McpEnvOp
         const entry = (container as Record<string, unknown>)['snapsort']
         if (entry !== undefined) {
           connected = true
-          upToDate = entriesEqual(entry, expected)
+          upToDate = entriesEqual(entry, expected, Boolean(def.includeDisabledFalse))
         }
       }
     }
@@ -209,8 +255,9 @@ export function connectMcpClient(
 
   let backupPath: string | undefined
   if (fs.existsSync(configPath)) {
-    backupPath = `${configPath}.snapsort.bak`
-    fs.copyFileSync(configPath, backupPath)
+    const realTarget = fs.realpathSync(configPath)
+    backupPath = `${realTarget}.snapsort.bak`
+    fs.copyFileSync(realTarget, backupPath)
   }
 
   const root = { ...parsed.data }
@@ -258,8 +305,9 @@ export function disconnectMcpClient(clientId: McpClientId, envOpts?: McpEnvOptio
     return { ok: true, clientId, configPath }
   }
 
-  const backupPath = `${configPath}.snapsort.bak`
-  fs.copyFileSync(configPath, backupPath)
+  const realTarget = fs.realpathSync(configPath)
+  const backupPath = `${realTarget}.snapsort.bak`
+  fs.copyFileSync(realTarget, backupPath)
   delete containerCopy['snapsort']
   root[def.rootKey] = containerCopy
   writeJsonAtomic(configPath, root, platform)
