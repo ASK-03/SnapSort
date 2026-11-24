@@ -1,5 +1,12 @@
 import { useAppStore } from '../store';
-import { Folder } from 'lucide-react';
+import { Cpu } from 'lucide-react';
+
+const ActiveBadge = () => (
+  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-hi border border-border text-xs font-medium text-success shrink-0">
+    <span className="w-1.5 h-1.5 rounded-full bg-success" aria-hidden="true" />
+    Local · Active
+  </span>
+);
 
 export const Settings = () => {
   const { viewMode } = useAppStore();
@@ -7,80 +14,55 @@ export const Settings = () => {
   if (viewMode !== 'settings') return null;
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-50 dark:bg-[#0f1115] h-full overflow-y-auto p-8">
+    <div className="flex-1 flex flex-col bg-bg text-text h-full overflow-y-auto p-8">
       <div className="max-w-3xl w-full mx-auto">
-        <h1 className="text-2xl font-semibold mb-8 text-slate-900 dark:text-slate-100">Settings</h1>
-        
+        <h1 className="text-2xl font-semibold tracking-tight mb-6 text-text">Settings</h1>
+
         <div className="space-y-6">
-          <div className="bg-white dark:bg-[#1a1d24] border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm dark:shadow-none">
-            <h3 className="text-lg font-medium text-slate-900 dark:text-slate-200 mb-4">Indexing & AI</h3>
-            
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 mb-4">
-                <Folder size={20} className="text-blue-500" />
-                <h2 className="text-lg font-medium text-slate-900 dark:text-slate-200">Library Folders</h2>
-              </div>
-              
-              <p className="text-sm text-slate-500 mb-4">
-                Manage the folders SnapSort watches for photos.
-              </p>
+          <section className="bg-surface border border-border rounded-xl p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <Cpu size={18} className="text-accent" aria-hidden="true" />
+              <h2 className="text-base font-semibold text-text">Indexing & AI</h2>
+            </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-slate-900 dark:text-slate-300 font-medium text-sm">Face Recognition</h4>
-                  <p className="text-xs text-slate-500 mt-1">Automatically group similar faces found in your photos.</p>
-                </div>
-                <div className="w-12 h-6 bg-blue-600 rounded-full relative cursor-pointer">
-                  <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                </div>
-              </div>
-              
-              <div className="border-t border-slate-200 dark:border-slate-800/50 pt-4 flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium text-slate-900 dark:text-slate-200">CLIP Semantic Search</h3>
-                  <p className="text-xs text-slate-500 mt-1">OpenAI ViT-B/32 (Local)</p>
-                </div>
-                <div className="w-12 h-6 bg-blue-600 rounded-full relative cursor-pointer">
-                  <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white dark:bg-[#1a1d24] border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm dark:shadow-none">
-            <h3 className="text-lg font-medium text-slate-900 dark:text-slate-200 mb-4">Storage & Library</h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-slate-900 dark:text-slate-300 font-medium text-sm">Clear Library Data</h4>
-                  <p className="text-xs text-slate-500 mt-1">Remove all indexed photos and faces. Files on disk won't be deleted.</p>
+                  <h3 className="text-text font-medium text-sm">Face Recognition</h3>
+                  <p className="text-xs text-text-mute mt-1">
+                    Automatically group similar faces locally using YuNet and SFace.
+                  </p>
                 </div>
-                <button className="bg-red-500/10 text-red-500 hover:bg-red-500/20 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                  Clear Index
-                </button>
+                <ActiveBadge />
               </div>
-            </div>
-          </div>
 
-          <div className="bg-white dark:bg-[#1a1d24] border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm dark:shadow-none">
-            <h3 className="text-lg font-medium text-slate-900 dark:text-slate-200 mb-4">Support</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="border-t border-border pt-4 flex items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-slate-900 dark:text-slate-300 font-medium text-sm">Report a Bug</h4>
-                  <p className="text-xs text-slate-500 mt-1">Found an issue? Let us know on GitHub.</p>
+                  <h3 className="text-text font-medium text-sm">CLIP Semantic Search</h3>
+                  <p className="text-xs text-text-mute mt-1">OpenAI ViT-B/32 quantized ONNX model running locally.</p>
                 </div>
-                <a 
-                  href="https://github.com/ASK-03/SnapSort/issues/new" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Open GitHub Issue
-                </a>
+                <ActiveBadge />
               </div>
             </div>
-          </div>
+          </section>
+
+          <section className="bg-surface border border-border rounded-xl p-6">
+            <h2 className="text-base font-semibold text-text mb-4">Support</h2>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-text font-medium text-sm">Report a Bug</h3>
+                <p className="text-xs text-text-mute mt-1">Found an issue? Let us know on GitHub.</p>
+              </div>
+              <a
+                href="https://github.com/ASK-03/SnapSort/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pressable bg-surface-hi border border-border text-text hover:bg-bg px-4 py-2 rounded-lg text-xs font-medium shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Open GitHub Issue
+              </a>
+            </div>
+          </section>
         </div>
       </div>
     </div>
