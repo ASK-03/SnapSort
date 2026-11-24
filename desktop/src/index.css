@@ -34,7 +34,7 @@
 
   --window-left: env(titlebar-area-x, 0px);
   --window-right: max(0px, calc(100vw - var(--window-left) - env(titlebar-area-width, 100vw)));
-  --window-height: max(42px, env(titlebar-area-height, 0px));
+  --window-height: max(44px, env(titlebar-area-height, 0px));
 }
 
 .dark {

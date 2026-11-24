@@ -4,7 +4,6 @@ import {
   FlipVertical,
   RotateCcw,
   RotateCw,
-  SlidersHorizontal,
   Sparkles,
   Sun,
 } from 'lucide-react';
@@ -31,7 +30,6 @@ interface EditPanelProps {
   onChange: (updater: (prev: EditState) => EditState) => void;
   onResetAll: () => void;
   onCancel: () => void;
-  onSaveCopy: () => void;
 }
 
 const TOOL_TITLES: Record<EditState['tool'], string> = {
@@ -59,7 +57,6 @@ export const EditPanel = ({
   onChange,
   onResetAll,
   onCancel,
-  onSaveCopy,
 }: EditPanelProps) => {
   const dirty = isEditDirty(state);
 
@@ -275,20 +272,19 @@ export const EditPanel = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={dirty ? onResetAll : onCancel}
-            disabled={isSaving}
-            className="pressable flex-1 py-2 rounded-lg text-xs font-medium bg-surface hover:bg-surface-hi border border-border text-text disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            onClick={onResetAll}
+            disabled={isSaving || !dirty}
+            className="pressable flex-1 py-2 rounded-lg text-xs font-medium bg-surface hover:bg-surface-hi border border-border text-text disabled:opacity-45 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            {dirty ? 'Reset all' : 'Cancel'}
+            Reset edits
           </button>
           <button
             type="button"
-            onClick={onSaveCopy}
+            onClick={onCancel}
             disabled={isSaving}
-            className="pressable flex-1 py-2 rounded-lg text-xs font-semibold bg-accent text-on-accent hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent inline-flex items-center justify-center gap-1.5"
+            className="pressable flex-1 py-2 rounded-lg text-xs font-medium bg-surface-hi hover:bg-bg border border-border text-text disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <SlidersHorizontal size={12} />
-            {isSaving ? 'Saving...' : 'Save copy'}
+            Cancel
           </button>
         </div>
       </div>

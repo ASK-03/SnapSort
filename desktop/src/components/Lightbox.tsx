@@ -453,6 +453,7 @@ export const Lightbox = () => {
 
   const activePresetLabel = FILTER_PRESETS.find((p) => p.id === editState.filterPreset)?.label || 'Original';
   const showCropFrame = viewerPanel === 'edit' && viewerZoom <= 1 && (editState.tool === 'crop' || hasCustomCrop(editState.crop));
+  const hasOverlayControls = !navigator.platform.toUpperCase().includes('MAC') && Boolean(window.electronAPI);
 
   return (
     <div
@@ -465,10 +466,10 @@ export const Lightbox = () => {
     >
       {/* z-30 keeps viewer header and Save dropdown strictly above z-10 right sidebar drawers */}
       <header
-        className="window-drag relative z-30 h-14 shrink-0 bg-viewer-header border-b border-border grid grid-cols-[1fr_auto_1fr] items-center gap-3"
+        className="window-drag relative z-30 h-11 min-h-[var(--window-height)] shrink-0 bg-viewer-header border-b border-border grid grid-cols-[1fr_auto_1fr] items-center gap-3"
         style={{
-          paddingLeft: 'calc(20px + var(--window-left))',
-          paddingRight: 'calc(20px + var(--window-right))',
+          paddingLeft: 'calc(16px + var(--window-left))',
+          paddingRight: 'calc(12px + var(--window-right))',
         }}
       >
         <div className="flex items-center gap-3">
@@ -564,21 +565,30 @@ export const Lightbox = () => {
                 <div
                   role="menu"
                   aria-label="Save options"
-                  className="save-dropdown absolute right-0 top-full mt-2 w-72 rounded-xl bg-viewer-panel border border-border shadow-2xl p-1.5 z-50 text-left"
+                  className="save-dropdown absolute right-0 top-full mt-2 w-64 rounded-xl bg-viewer-panel border border-border shadow-2xl p-1.5 z-50 text-left"
                 >
                   <button
                     type="button"
                     role="menuitem"
                     disabled={isSaving}
                     onClick={() => void executeSave('copy')}
-                    className="pressable w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className="pressable w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
-                    <Copy size={15} className="text-text-dim mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-xs font-semibold text-text">Save as Copy</div>
-                      <div className="text-[11px] text-text-dim">Keeps the original file untouched</div>
+                    <span className="w-8 h-8 rounded-lg bg-accent-soft text-accent grid place-items-center shrink-0" aria-hidden="true">
+                      <Copy size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-semibold text-text">Save as Copy</span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-hi text-text-mute">
+                          Default
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-text-dim mt-0.5">Keeps the original untouched</div>
                     </div>
                   </button>
+
+                  <div className="h-px bg-border my-1.5" />
 
                   {!confirmReplaceOpen ? (
                     <button
@@ -586,17 +596,19 @@ export const Lightbox = () => {
                       role="menuitem"
                       disabled={isSaving}
                       onClick={() => setConfirmReplaceOpen(true)}
-                      className="pressable w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      className="pressable w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left hover:bg-danger/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
-                      <AlertTriangle size={15} className="text-danger mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-danger">Replace Original</div>
-                        <div className="text-[11px] text-text-dim">Overwrites original file on disk</div>
+                      <span className="w-8 h-8 rounded-lg bg-danger/15 text-danger grid place-items-center shrink-0" aria-hidden="true">
+                        <AlertTriangle size={15} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-semibold text-danger">Replace Original</div>
+                        <div className="text-[11px] text-text-dim mt-0.5">Overwrites file on disk</div>
                       </div>
                     </button>
                   ) : (
-                    <div className="mt-1 rounded-lg bg-surface-hi border border-border p-2.5 space-y-2">
-                      <p className="text-[11px] text-text leading-snug">
+                    <div className="rounded-lg bg-surface-hi border border-border p-2.5 space-y-2 text-left">
+                      <p className="text-xs text-text leading-snug">
                         Overwrite <span className="font-semibold">{filename}</span> on disk?
                       </p>
                       <div className="flex items-center gap-2">
@@ -629,7 +641,7 @@ export const Lightbox = () => {
             title="Edit photo"
             onClick={() => setViewerPanel(viewerPanel === 'edit' ? 'none' : 'edit')}
           >
-            <SlidersHorizontal size={16} />
+            <SlidersHorizontal size={15} />
           </IconButton>
           <IconButton
             active={viewerPanel === 'info'}
@@ -638,8 +650,11 @@ export const Lightbox = () => {
             title="Photo details"
             onClick={() => setViewerPanel(viewerPanel === 'info' ? 'none' : 'info')}
           >
-            <Info size={16} />
+            <Info size={15} />
           </IconButton>
+          {hasOverlayControls && (
+            <span className="w-px h-5 bg-border ml-1 shrink-0" aria-hidden="true" />
+          )}
         </div>
       </header>
 
@@ -792,7 +807,7 @@ export const Lightbox = () => {
             {viewerPanel === 'edit' && editState.tool === 'filters' ? (
               <div
                 data-keep-open="true"
-                className="flex items-center gap-3 overflow-x-auto max-w-full py-1 px-2"
+                className="flex items-center gap-3.5 lg:gap-4 overflow-x-auto max-w-full py-1.5 px-3"
               >
                 {FILTER_PRESETS.map((preset) => {
                   const active = editState.filterPreset === preset.id;
@@ -802,11 +817,11 @@ export const Lightbox = () => {
                       type="button"
                       aria-pressed={active}
                       onClick={() => setEditState((prev) => ({ ...prev, filterPreset: preset.id }))}
-                      className="pressable flex flex-col items-center gap-1.5 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
+                      className="pressable flex flex-col items-center gap-2 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
                     >
                       <div
-                        className={`w-16 h-12 rounded-lg overflow-hidden border-2 bg-surface ${
-                          active ? 'border-accent ring-2 ring-accent/40' : 'border-border'
+                        className={`w-20 h-[60px] lg:w-24 lg:h-[72px] xl:w-28 xl:h-[84px] rounded-xl overflow-hidden border bg-surface transition-shadow duration-150 motion-reduce:transition-none ${
+                          active ? 'border-accent ring-2 ring-accent ring-offset-2 ring-offset-viewer-bg' : 'border-border hover:border-text-mute'
                         }`}
                       >
                         <img
@@ -816,7 +831,7 @@ export const Lightbox = () => {
                           style={{ filter: computeCssFilter(preset.id, editState.adjustments) }}
                         />
                       </div>
-                      <span className={`text-[11px] font-medium ${active ? 'text-text font-semibold' : 'text-text-dim'}`}>
+                      <span className={`text-xs font-medium ${active ? 'text-text font-semibold' : 'text-text-dim'}`}>
                         {preset.label}
                       </span>
                     </button>
@@ -906,7 +921,6 @@ export const Lightbox = () => {
             resetEditor();
             setViewerPanel('none');
           }}
-          onSaveCopy={() => void executeSave('copy')}
         />
         <InfoPanel imagePath={lightboxImage} faces={faces} open={viewerPanel === 'info'} onFaceClick={openFace} />
       </div>
@@ -938,7 +952,7 @@ const IconButton = ({
     aria-label={ariaLabel}
     aria-pressed={ariaPressed}
     title={title}
-    className={`pressable w-9 h-9 rounded-full grid place-items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+    className={`pressable w-8 h-8 rounded-full grid place-items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
       active
         ? 'bg-accent text-on-accent'
         : 'bg-viewer-control hover:bg-viewer-control-hover text-text'

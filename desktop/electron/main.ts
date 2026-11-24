@@ -131,7 +131,7 @@ function createWindow() {
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin'
       ? true
-      : { height: 39, ...titleBarColors.dark },
+      : { height: 44, ...titleBarColors.dark },
     ...(process.platform === 'darwin' && { trafficLightPosition: { x: 12, y: 13 } }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
