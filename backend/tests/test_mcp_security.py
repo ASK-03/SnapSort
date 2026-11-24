@@ -16,6 +16,7 @@ if _TESTS_DIR not in sys.path:
 
 from mcp_test_helpers import (  # noqa: E402
     MODELS_DIR,
+    StdioMcpClient,
     http_json,
     make_jpeg,
     shutdown_backend_from_runtime,
@@ -316,6 +317,73 @@ class TestMcpSecurityAndPrivacy(unittest.TestCase):
         rc = proc.wait(timeout=10)
         self.assertEqual(rc, 0)
         self.assertIsNone(read_runtime_info(self.data_dir))
+
+    def test_preview_requires_explicit_user_confirmation_and_forbids_local_fallback(self):
+        img = os.path.join(self.goa_dir, "private_photo.jpg")
+        make_jpeg(img)
+        save_policy(
+            self.data_dir,
+            {
+                "mcp_enabled": True,
+                "headless_enabled": True,
+                "allow_previews": True,
+                "approved_roots": [self.goa_dir],
+            },
+        )
+        with StdioMcpClient(self.data_dir, MODELS_DIR, idle_timeout=60) as client:
+            client.initialize()
+
+            r_missing = client.call_tool("get_image_preview", {"path": img})
+            self.assertTrue(r_missing["isError"])
+            self.assertIn("Permission required", r_missing["content"][0]["text"])
+
+            r_false = client.call_tool("get_image_preview", {"path": img, "user_confirmed_preview": False})
+            self.assertTrue(r_false["isError"])
+            self.assertIn("Permission required", r_false["content"][0]["text"])
+
+            # Even when user_confirmed_preview is True, disabled Settings blocks preview & forbids local read
+            save_policy(
+                self.data_dir,
+                {
+                    "mcp_enabled": True,
+                    "headless_enabled": True,
+                    "allow_previews": False,
+                    "approved_roots": [self.goa_dir],
+                },
+            )
+            r_disabled = client.call_tool("get_image_preview", {"path": img, "user_confirmed_preview": True})
+            self.assertTrue(r_disabled["isError"])
+            self.assertIn("Do NOT open or read this image path", r_disabled["content"][0]["text"])
+
+    def test_approved_folders_empty_and_missing_guidance(self):
+        save_policy(self.data_dir, {"mcp_enabled": True, "approved_roots": []})
+        env_patch, client = self._test_client()
+        try:
+            r_none = client.get("/api/mcp/folders", headers=self._auth())
+            self.assertEqual(r_none.status_code, 200)
+            d_none = r_none.json()
+            self.assertEqual(d_none["status"], "no_approved_folders")
+            self.assertIn("Add Folder", d_none["action_required"])
+
+            empty_dir = os.path.join(self.goa_dir, "empty_sub")
+            os.makedirs(empty_dir, exist_ok=True)
+            save_policy(self.data_dir, {"mcp_enabled": True, "approved_roots": [empty_dir]})
+
+            r_empty = client.get("/api/mcp/folders", headers=self._auth())
+            self.assertEqual(r_empty.status_code, 200)
+            d_empty = r_empty.json()
+            self.assertEqual(d_empty["status"], "no_images_in_approved_folders")
+            self.assertTrue(d_empty["action_required"])
+
+            r_imgs = client.get("/api/mcp/folders/images", params={"folder": empty_dir}, headers=self._auth())
+            self.assertEqual(r_imgs.status_code, 200)
+            d_imgs = r_imgs.json()
+            self.assertEqual(d_imgs["images"], [])
+            self.assertEqual(d_imgs["status"], "empty_folder")
+            self.assertTrue(d_imgs["action_required"])
+        finally:
+            client.__exit__(None, None, None)
+            env_patch.stop()
 
 
 if __name__ == "__main__":

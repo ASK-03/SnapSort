@@ -326,6 +326,71 @@ class TestFastApiSecurityAndEndpoints(unittest.TestCase):
             self.assertLessEqual(max(prev_img.size), 256)
             self.assertEqual(len(prev_img.getexif()), 0)
 
+    def test_single_call_person_name_search_and_clip_backfill(self):
+        img1 = os.path.join(self.approved_dir, "priya_sunset.jpg")
+        img2 = os.path.join(self.approved_dir, "asha1.jpg")
+        img3 = os.path.join(self.approved_dir, "asha2.jpg")
+        img_unclipped = os.path.join(self.approved_dir, "backfill.jpg")
+        for p in (img1, img2, img3, img_unclipped):
+            make_jpeg(p)
+
+        ctrl = api.controller()
+        ctrl._clip_proc = StubClipProcessor()
+        ctrl.db.insert_occurrences_batch(
+            [
+                (img1, 3, (0, 0, 10, 10)),
+                (img2, 4, (0, 0, 10, 10)),
+                (img3, 5, (0, 0, 10, 10)),
+            ]
+        )
+        ctrl.db.set_face_name(3, "Priya")
+        ctrl.db.set_face_name(4, "Asha")
+        ctrl.db.set_face_name(5, "Asha")
+
+        id1 = ctrl.db.get_image_id(img1)
+        vec = np.zeros(512, dtype="float32")
+        vec[0] = 1.0
+        ctrl.clip_index.add(id1, vec)
+        ctrl.db.mark_clip_indexed(id1)
+
+        r_ok = self.client.get(
+            "/api/search",
+            params={"q": "beach", "person_name": "Priya", "include_meta": "true"},
+            headers=self._auth(),
+        )
+        self.assertEqual(r_ok.status_code, 200)
+        d_ok = r_ok.json()
+        self.assertEqual(d_ok["status"], "ok")
+        self.assertEqual(d_ok["resolved_person_id"], 3)
+        self.assertEqual(d_ok["person_photo_count"], 1)
+        self.assertEqual(d_ok["results"][0]["path"], img1)
+
+        r_dup = self.client.get(
+            "/api/search",
+            params={"q": "beach", "person_name": "Asha", "include_meta": "true"},
+            headers=self._auth(),
+        )
+        self.assertEqual(r_dup.status_code, 200)
+        d_dup = r_dup.json()
+        self.assertEqual(d_dup["status"], "disambiguation_required")
+        self.assertEqual(len(d_dup["matching_people"]), 2)
+
+        r_missing = self.client.get(
+            "/api/search",
+            params={"q": "beach", "person_name": "NobodyHere", "include_meta": "true"},
+            headers=self._auth(),
+        )
+        self.assertEqual(r_missing.status_code, 200)
+        self.assertEqual(r_missing.json()["status"], "person_not_found")
+
+        ctrl.db.insert_image(img_unclipped)
+        for p in (img1, img2, img3):
+            ctrl.db.mark_clip_indexed(ctrl.db.get_image_id(p))
+        job = ctrl.enqueue_scan(self.approved_dir)
+        self.assertEqual(job["new_images"], 1)
+        if job.get("scan_id"):
+            ctrl.wait_for_job(job["scan_id"], 15.0)
+
 
 class TestStdioMcpSubprocessHeadless(unittest.TestCase):
     def setUp(self) -> None:
@@ -355,6 +420,8 @@ class TestStdioMcpSubprocessHeadless(unittest.TestCase):
             instructions = result.get("instructions", "")
             self.assertIn("list_people", instructions)
             self.assertIn("list_approved_folders", instructions)
+            self.assertIn("user_confirmed_preview", instructions)
+            self.assertIn("local file-reading", instructions)
 
             tools = client.list_tools()
             self.assertEqual(len(tools), 10)
@@ -414,7 +481,10 @@ class TestStdioMcpSubprocessHeadless(unittest.TestCase):
             r_search = client.call_tool("search_images", {"query": "sunset", "folder": self.approved_dir})
             self.assertFalse(r_search["isError"])
 
-            r_prev = client.call_tool("get_image_preview", {"path": self.photo_path, "max_size": 256})
+            r_prev = client.call_tool(
+                "get_image_preview",
+                {"path": self.photo_path, "user_confirmed_preview": True, "max_size": 256},
+            )
             self.assertFalse(r_prev["isError"])
             item = r_prev["content"][0]
             self.assertEqual(item["type"], "image")
