@@ -13,5 +13,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   showApplicationMenu: (x: number, y: number) => ipcRenderer.send('window:show-menu', x, y),
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
-  getBackendPort: () => ipcRenderer.invoke('getBackendPort')
+  getBackendPort: () => ipcRenderer.invoke('getBackendPort'),
+  getBackendConfig: () => ipcRenderer.invoke('getBackendConfig'),
+  getMcpPolicy: () => ipcRenderer.invoke('mcp:getPolicy'),
+  saveMcpPolicy: (policy: Record<string, unknown>) => ipcRenderer.invoke('mcp:savePolicy', policy),
+  addMcpApprovedFolder: () => ipcRenderer.invoke('mcp:addApprovedFolder'),
+  getMcpClientConfig: () => ipcRenderer.invoke('mcp:getClientConfig'),
+  getMcpAuditLog: () => ipcRenderer.invoke('mcp:getAuditLog'),
+  stopMcpHeadless: () => ipcRenderer.invoke('mcp:stopHeadless'),
 })

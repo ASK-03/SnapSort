@@ -79,8 +79,17 @@ function App() {
 
   useEffect(() => {
     if (!isReady) return;
+    // Initial load + attach to any headless scan already in progress
     loadImages();
-  }, [isReady, loadImages]);
+    getProgress()
+      .then((prog) => {
+        if (prog.is_scanning) {
+          setIsScanning(true);
+          setProgress({ total: prog.total_images, processed: prog.processed_images, pending: prog.pending_tasks });
+        }
+      })
+      .catch(console.error);
+  }, [isReady, loadImages, setIsScanning, setProgress]);
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
