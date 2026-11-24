@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -11,6 +12,10 @@ from unittest.mock import patch
 import numpy as np
 from fastapi.testclient import TestClient
 from PIL import Image
+
+_TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _TESTS_DIR not in sys.path:
+    sys.path.insert(0, _TESTS_DIR)
 
 from mcp_test_helpers import (
     BACKEND_DIR,
