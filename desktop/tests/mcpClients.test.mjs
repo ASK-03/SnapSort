@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -116,6 +117,97 @@ test('connectMcpClient writes VS Code servers schema and refuses corrupt JSON', 
     assert.equal(badRes.ok, false)
     assert.match(badRes.error, /invalid JSON/i)
     assert.equal(fs.readFileSync(cursorCfg, 'utf8'), '{ broken json !!!')
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true })
+  }
+})
+
+test('Antigravity and Antigravity IDE detection, symlink preservation, and disabled handling', () => {
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'snapsort-mcp-agy-'))
+  try {
+    // 1. Legacy fallback when only ~/.gemini/antigravity exists
+    const legacyDir = path.join(tmpHome, '.gemini', 'antigravity')
+    fs.mkdirSync(legacyDir, { recursive: true })
+    const legacyDetected = detectMcpClients(SERVER_ENTRY, { homeDir: tmpHome, platform: 'linux' })
+    const legacyAgy = legacyDetected.find((c) => c.id === 'antigravity')
+    assert.equal(legacyAgy.installed, true)
+    assert.equal(legacyAgy.configPath, path.join(legacyDir, 'mcp_config.json'))
+
+    // 2. Shared ~/.gemini/config/mcp_config.json with symlink from antigravity/mcp_config.json
+    const sharedDir = path.join(tmpHome, '.gemini', 'config')
+    const sharedCfg = path.join(sharedDir, 'mcp_config.json')
+    const legacyCfg = path.join(legacyDir, 'mcp_config.json')
+    const ideDir = path.join(tmpHome, '.gemini', 'antigravity-ide')
+    fs.mkdirSync(sharedDir, { recursive: true })
+    fs.mkdirSync(ideDir, { recursive: true })
+    fs.writeFileSync(sharedCfg, JSON.stringify({ mcpServers: { existing: { command: 'echo', args: ['hi'] } } }))
+    fs.symlinkSync(sharedCfg, legacyCfg)
+
+    const connAgy = connectMcpClient('antigravity', SERVER_ENTRY, { homeDir: tmpHome, platform: 'linux' })
+    assert.equal(connAgy.ok, true)
+    assert.equal(connAgy.configPath, sharedCfg)
+    assert.equal(fs.lstatSync(legacyCfg).isSymbolicLink(), true)
+
+    const agyJson = JSON.parse(fs.readFileSync(sharedCfg, 'utf8'))
+    assert.deepEqual(agyJson.mcpServers.snapsort, {
+      command: SERVER_ENTRY.command,
+      args: SERVER_ENTRY.args,
+      disabled: false,
+    })
+    assert.deepEqual(agyJson.mcpServers.existing, { command: 'echo', args: ['hi'] })
+
+    // Mark disabled: true -> upToDate should become false
+    agyJson.mcpServers.snapsort.disabled = true
+    fs.writeFileSync(sharedCfg, JSON.stringify(agyJson))
+    const disabledStatus = detectMcpClients(SERVER_ENTRY, { homeDir: tmpHome, platform: 'linux' }).find(
+      (c) => c.id === 'antigravity',
+    )
+    assert.equal(disabledStatus.connected, true)
+    assert.equal(disabledStatus.upToDate, false)
+
+    // Antigravity IDE connect & disconnect
+    const connIde = connectMcpClient('antigravity-ide', SERVER_ENTRY, { homeDir: tmpHome, platform: 'linux' })
+    assert.equal(connIde.ok, true)
+    const ideCfg = path.join(ideDir, 'mcp_config.json')
+    assert.equal(JSON.parse(fs.readFileSync(ideCfg, 'utf8')).mcpServers.snapsort.disabled, false)
+
+    const discIde = disconnectMcpClient('antigravity-ide', { homeDir: tmpHome, platform: 'linux' })
+    assert.equal(discIde.ok, true)
+    assert.equal(JSON.parse(fs.readFileSync(ideCfg, 'utf8')).mcpServers.snapsort, undefined)
+  } finally {
+    fs.rmSync(tmpHome, { recursive: true, force: true })
+  }
+})
+
+test('agy CLI mcp list reads connectMcpClient and disconnectMcpClient output', (t) => {
+  try {
+    execFileSync('agy', ['--help'], { stdio: 'ignore' })
+  } catch {
+    t.skip('agy CLI not installed in PATH')
+    return
+  }
+
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'snapsort-agy-cli-'))
+  try {
+    fs.mkdirSync(path.join(tmpHome, '.gemini', 'config'), { recursive: true })
+    const res = connectMcpClient('antigravity', SERVER_ENTRY, { homeDir: tmpHome, platform: 'linux' })
+    assert.equal(res.ok, true)
+
+    const listOut = execFileSync('agy', ['mcp', 'list'], {
+      env: { ...process.env, HOME: tmpHome },
+      encoding: 'utf8',
+    })
+    assert.match(listOut, /snapsort/)
+    assert.match(listOut, /stdio/)
+    assert.match(listOut, /enabled/)
+
+    const disc = disconnectMcpClient('antigravity', { homeDir: tmpHome, platform: 'linux' })
+    assert.equal(disc.ok, true)
+    const afterOut = execFileSync('agy', ['mcp', 'list'], {
+      env: { ...process.env, HOME: tmpHome },
+      encoding: 'utf8',
+    })
+    assert.match(afterOut, /No MCP servers configured/)
   } finally {
     fs.rmSync(tmpHome, { recursive: true, force: true })
   }
