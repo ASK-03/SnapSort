@@ -251,13 +251,20 @@ class SnapSortMCPBridge:
 
 SERVER_INSTRUCTIONS = (
     "SnapSort indexes and searches a local on-device photo library. "
-    "Follow these rules when answering photo requests:\n"
-    "1. Resolve person names via list_people first. If multiple face clusters share the same name, ask the user to disambiguate before filtering.\n"
-    "2. For person-only queries (for example 'show me Priya'), call get_person_images so photos without CLIP embeddings are included.\n"
-    "3. For person + scene queries (for example 'Priya at the beach'), pass person_id into search_images(query=..., person_id=...).\n"
-    "4. Check list_approved_folders before browsing or scanning folders; only user-approved root directories are accessible.\n"
-    "5. When calling scan_folder, use wait_seconds (max 30) for small folders and poll get_scan_progress(scan_id) if indexing continues.\n"
-    "6. Only call get_image_preview when visual inspection is needed (requires user opt-in in Settings; returns downscaled EXIF-stripped JPEG)."
+    "Follow these rules strictly:\n"
+    "1. STRICT PRIVACY RULE: Never view, open, or inspect any image bytes—neither via get_image_preview "
+    "nor via any local file-reading or vision tool (such as read_file, view_file, or shell commands)—unless "
+    "the user explicitly grants permission in this conversation AND allow_previews is enabled in Settings. "
+    "Return indexed file paths and metadata only.\n"
+    "2. MINIMIZE TOOL CALLS (1-2 calls max): Pass person_name directly into search_images(query=..., person_name=...) "
+    "to resolve the person and search in a single call instead of chaining list_people + get_library_stats + search_images.\n"
+    "3. PERSON-ONLY REQUESTS: Call list_people then get_person_images so photos without CLIP embeddings are included.\n"
+    "4. DO NOT LOOP ON EMPTY RESULTS: If search_images returns empty with a hint, make at most ONE broader retry "
+    "(or lower min_score once, e.g. 0.18), then report the result directly to the user.\n"
+    "5. MISSING OR EMPTY APPROVED FOLDERS: If list_approved_folders or list_folder_images returns action_required "
+    "(for example no_approved_folders or empty_folder), stop immediately and relay that exact instruction to the user.\n"
+    "6. SCANNING: Use scan_folder with wait_seconds (max 30) on approved folders and poll get_scan_progress(scan_id) if needed.\n"
+    "7. PREVIEWS: Only call get_image_preview when the user explicitly asks to inspect an image, passing user_confirmed_preview=true."
 )
 
 _READ_ONLY_ANNOTATIONS: dict[str, bool] = {
@@ -305,15 +312,21 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "search_images",
-        "description": "Semantic CLIP search across indexed photos, optionally pre-filtered by person_id and/or folder.",
+        "description": (
+            "Semantic CLIP search across indexed photos in one call. "
+            "Supports optional person_name (auto-resolved), person_id, and folder filters applied before ranking, "
+            "and returns status/hint diagnostics when empty."
+        ),
         "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Natural-language scene or description query."},
+                "person_name": {"type": "string", "description": "Optional person name to resolve and filter before ranking (avoids extra list_people calls)."},
                 "person_id": {"type": "integer", "description": "Optional face cluster ID applied before candidate selection."},
                 "folder": {"type": "string", "description": "Optional folder prefix applied before candidate selection."},
                 "top_k": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                "min_score": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Optional cosine similarity cutoff (defaults to 0.22, or 0.20 with person filter)."},
             },
             "required": ["query"],
         },
@@ -382,15 +395,22 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "get_image_preview",
-        "description": "Fetch a downscaled EXIF-stripped JPEG preview of an indexed image (when enabled in Settings).",
+        "description": (
+            "Fetch a downscaled EXIF-stripped JPEG preview of an indexed image ONLY when the user explicitly "
+            "gives permission in this conversation AND allow_previews is enabled in Settings."
+        ),
         "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Indexed image path."},
+                "user_confirmed_preview": {
+                    "type": "boolean",
+                    "description": "MUST be true ONLY after the user explicitly asked or gave permission in this conversation to view the image. Never set to true on your own.",
+                },
                 "max_size": {"type": "integer", "minimum": 64, "maximum": 1024, "default": 1024},
             },
-            "required": ["path"],
+            "required": ["path", "user_confirmed_preview"],
         },
     },
 ]
@@ -426,10 +446,14 @@ def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) ->
             "limit": min(100, max(1, int(args.get("top_k", 20)))),
             "include_meta": "true",
         }
+        if args.get("person_name"):
+            params["person_name"] = str(args["person_name"])
         if args.get("person_id") is not None:
             params["person_id"] = int(args["person_id"])
         if args.get("folder"):
             params["folder"] = str(args["folder"])
+        if args.get("min_score") is not None:
+            params["min_score"] = max(0.0, min(1.0, float(args["min_score"])))
         qs = urllib.parse.urlencode(params)
         data = bridge.request_json("GET", f"/api/search?{qs}")
         return [{"type": "text", "text": json.dumps(data)}], {"query": params["q"], "count": len(data.get("results", [])) if isinstance(data, dict) else 0}
@@ -474,6 +498,18 @@ def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) ->
         return [{"type": "text", "text": json.dumps(data)}], {"scan_id": args.get("scan_id")}
 
     if name == "get_image_preview":
+        if args.get("user_confirmed_preview") is not True:
+            raise RuntimeError(
+                "Permission required: Do not view or open any image (via get_image_preview or any local "
+                "file-reading tool) until the user explicitly grants permission in this conversation."
+            )
+        policy = load_policy(bridge.data_dir)
+        if not policy["allow_previews"]:
+            raise RuntimeError(
+                "Visual previews are disabled in SnapSort Settings. Do NOT open or read this image path "
+                "with any local file or vision tool; ask the user to enable 'Allow Visual Previews' in "
+                "SnapSort Settings if they want you to inspect photos."
+            )
         max_size = max(64, min(1024, int(args.get("max_size", 1024))))
         qs = urllib.parse.urlencode({"path": str(args["path"]), "max_size": max_size})
         status, raw, ctype = bridge.request("GET", f"/api/mcp/preview?{qs}")
