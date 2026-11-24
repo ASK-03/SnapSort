@@ -101,7 +101,8 @@ def _publish_runtime_if_needed(app_instance: FastAPI) -> None:
 async def _watchdog_loop(app_instance: FastAPI) -> None:
     try:
         while True:
-            await asyncio.sleep(5)
+            sleep_s = min(5.0, max(0.5, float(app_instance.state.idle_timeout) / 2.0))
+            await asyncio.sleep(sleep_s)
             ctrl = getattr(app_instance.state, "controller", None)
             if ctrl is not None:
                 ctrl.shutdown_idle_pool()
