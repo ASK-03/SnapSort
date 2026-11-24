@@ -191,9 +191,10 @@
 }
 .window-actions {
   justify-self: end;
-  margin-right: calc(8px + var(--window-right));
-  padding-right: min(8px, var(--window-right));
-  border-right: min(1px, var(--window-right)) solid var(--ss-border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 12px;
 }
 .window-actions button {
   @apply grid h-7 w-7 place-items-center rounded-md text-text-dim;

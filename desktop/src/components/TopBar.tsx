@@ -2,6 +2,7 @@ import { ChevronDown, Moon, Search, Sun, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store';
 import { api } from '../api';
+import { WindowControls } from './WindowControls';
 
 export const TopBar = () => {
   const { searchQuery, setSearchQuery, theme, setTheme } = useAppStore();
@@ -139,6 +140,7 @@ export const TopBar = () => {
         >
           {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         </button>
+        <WindowControls variant="toolbar" />
       </div>
     </header>
   );

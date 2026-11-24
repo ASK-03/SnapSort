@@ -40,6 +40,7 @@ import {
 } from '../lib/editor';
 import { InfoPanel } from './InfoPanel';
 import { EditPanel } from './EditPanel';
+import { WindowControls } from './WindowControls';
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
@@ -453,7 +454,6 @@ export const Lightbox = () => {
 
   const activePresetLabel = FILTER_PRESETS.find((p) => p.id === editState.filterPreset)?.label || 'Original';
   const showCropFrame = viewerPanel === 'edit' && viewerZoom <= 1 && (editState.tool === 'crop' || hasCustomCrop(editState.crop));
-  const hasOverlayControls = !navigator.platform.toUpperCase().includes('MAC') && Boolean(window.electronAPI);
 
   return (
     <div
@@ -469,7 +469,7 @@ export const Lightbox = () => {
         className="window-drag relative z-30 h-11 min-h-[var(--window-height)] shrink-0 bg-viewer-header border-b border-border grid grid-cols-[1fr_auto_1fr] items-center gap-3"
         style={{
           paddingLeft: 'calc(16px + var(--window-left))',
-          paddingRight: 'calc(12px + var(--window-right))',
+          paddingRight: '12px',
         }}
       >
         <div className="flex items-center gap-3">
@@ -652,9 +652,7 @@ export const Lightbox = () => {
           >
             <Info size={15} />
           </IconButton>
-          {hasOverlayControls && (
-            <span className="w-px h-5 bg-border ml-1 shrink-0" aria-hidden="true" />
-          )}
+          <WindowControls variant="viewer" />
         </div>
       </header>
 

@@ -107,16 +107,9 @@ function stopPythonBackend() {
   }
 }
 
-// Use opaque surfaces: on Linux a transparent overlay can inherit the system
-// titlebar color even when SnapSort is using the opposite theme.
-const titleBarColors = {
-  light: { color: '#F5F4F1', symbolColor: '#484B50' },
-  dark: { color: '#1E1F22', symbolColor: '#DDDFE3' },
-  viewer: { color: '#0D0E10', symbolColor: '#ECEDEE' },
-  viewerLight: { color: '#FFFFFF', symbolColor: '#484B50' },
-}
+type WindowTheme = 'light' | 'dark' | 'viewer' | 'viewerLight'
 
-const windowBgColors: Record<keyof typeof titleBarColors, string> = {
+const windowBgColors: Record<WindowTheme, string> = {
   light: '#FAF9F6',
   dark: '#141517',
   viewer: '#0A0B0C',
@@ -129,15 +122,24 @@ function createWindow() {
     height: 800,
     backgroundColor: windowBgColors.dark,
     titleBarStyle: 'hidden',
-    titleBarOverlay: process.platform === 'darwin'
-      ? true
-      : { height: 44, ...titleBarColors.dark },
-    ...(process.platform === 'darwin' && { trafficLightPosition: { x: 12, y: 13 } }),
+    ...(process.platform === 'darwin' && {
+      titleBarOverlay: true,
+      trafficLightPosition: { x: 12, y: 14 },
+    }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false)
+
+  const emitMaximized = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('window:maximized-changed', mainWindow.isMaximized())
+  }
+  mainWindow.on('maximize', emitMaximized)
+  mainWindow.on('unmaximize', emitMaximized)
+  mainWindow.on('enter-full-screen', emitMaximized)
+  mainWindow.on('leave-full-screen', emitMaximized)
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) {
@@ -195,13 +197,33 @@ app.whenReady().then(async () => {
   // Expose the dynamic backend port to the frontend
   ipcMain.handle('getBackendPort', () => backendPort)
 
-  ipcMain.on('window:set-control-theme', (event, theme: keyof typeof titleBarColors) => {
-    if (!mainWindow || event.sender !== mainWindow.webContents || !Object.hasOwn(titleBarColors, theme)) return
+  ipcMain.on('window:set-control-theme', (event, theme: WindowTheme) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !Object.hasOwn(windowBgColors, theme)) return
     mainWindow.setBackgroundColor(windowBgColors[theme])
-    if (process.platform !== 'darwin') {
-      mainWindow.setTitleBarOverlay(titleBarColors[theme])
+  })
+
+  ipcMain.on('window:minimize', (event) => {
+    if (mainWindow && event.sender === mainWindow.webContents) {
+      mainWindow.minimize()
     }
   })
+
+  ipcMain.on('window:toggle-maximize', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+    } else {
+      mainWindow.maximize()
+    }
+  })
+
+  ipcMain.on('window:close', (event) => {
+    if (mainWindow && event.sender === mainWindow.webContents) {
+      mainWindow.close()
+    }
+  })
+
+  ipcMain.handle('window:is-maximized', () => Boolean(mainWindow?.isMaximized()))
 
   ipcMain.on('window:show-menu', (event, x: number, y: number) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return
