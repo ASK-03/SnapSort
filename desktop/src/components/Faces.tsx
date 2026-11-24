@@ -287,7 +287,7 @@ export const Faces = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
-      <header className="flex shrink-0 items-baseline justify-between gap-4 px-6 pt-5 pb-3.5">
+      <header className="flex shrink-0 items-center justify-between gap-4 px-6 pt-5 pb-3.5 min-h-[76px]">
         <div className="flex items-baseline gap-3 min-w-0">
           <h1 className="text-3xl leading-tight font-semibold tracking-[-0.025em] text-text">
             {isPeople ? 'People' : 'Faces'}
@@ -299,7 +299,7 @@ export const Faces = () => {
           <button
             type="button"
             onClick={() => void handleMerge()}
-            className="pressable inline-flex items-center gap-2 bg-surface border border-border hover:bg-surface-hi text-text px-3.5 py-1.5 rounded-lg text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="pressable inline-flex items-center gap-2 h-9 bg-surface border border-border hover:bg-surface-hi text-text px-3.5 rounded-lg text-sm font-medium shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <Merge size={15} aria-hidden="true" />
             <span className="tabular-nums">Merge {selectedFaceIds.length}</span>
