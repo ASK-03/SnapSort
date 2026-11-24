@@ -144,103 +144,108 @@ class Controller:
         if not os.path.exists(canonical_folder) or not os.path.isdir(canonical_folder):
             return {"error": "Invalid folder path"}
 
-        # Deduplicate if an identical folder job is already queued or running
-        with self.scan_lock:
-            for existing_id in ([self.active_job_id] if self.active_job_id else []) + list(self.job_queue):
-                job = self.jobs.get(existing_id)
-                if job and job["folder"] == canonical_folder and job["status"] in ("queued", "walking", "indexing"):
-                    return dict(job)
-
-        all_image_paths: list[str] = []
-        for root, _, files in os.walk(canonical_folder):
-            for fn in files:
-                if not fn.lower().endswith(self.SUPPORTED_EXTENSIONS):
-                    continue
-                full_path = os.path.join(root, fn)
-                if approved_roots is not None and not is_path_within_approved_roots(full_path, approved_roots):
-                    logger.warning("Skipping symlink outside approved roots: %s", full_path)
-                    continue
-                all_image_paths.append(full_path)
-
-        processed_mtimes = self.db.get_processed_images_with_mtime()
-        to_process: list[str] = []
-        modified_paths: set[str] = set()
-        for path in all_image_paths:
-            if path not in processed_mtimes:
-                to_process.append(path)
-            else:
-                try:
-                    cur_mtime = os.path.getmtime(path)
-                except OSError:
-                    continue
-                if abs(cur_mtime - processed_mtimes[path]) > 1e-6:
-                    to_process.append(path)
-                    modified_paths.add(path)
-
         scan_id = str(uuid.uuid4())
         now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-        if max_new_images is not None and len(to_process) > max_new_images:
-            job = {
+        # Deduplicate and reserve a "walking" slot atomically under scan_lock
+        with self.scan_lock:
+            for job in self.jobs.values():
+                if job["folder"] == canonical_folder and job["status"] in ("queued", "walking", "indexing"):
+                    return dict(job)
+            walking_job = {
                 "scan_id": scan_id,
                 "folder": canonical_folder,
-                "status": "failed",
-                "total_images": len(all_image_paths),
-                "new_images": len(to_process),
-                "processed_images": 0,
-                "failed_images": 0,
-                "error": (
-                    f"Folder contains {len(to_process)} images to index, exceeding the "
-                    f"headless limit of {max_new_images}."
-                ),
-                "started_at": now_iso,
-                "completed_at": now_iso,
-            }
-            with self.scan_lock:
-                self.jobs[scan_id] = job
-                ev = threading.Event()
-                ev.set()
-                self._job_events[scan_id] = ev
-                return dict(job)
-
-        if len(to_process) == 0:
-            job = {
-                "scan_id": scan_id,
-                "folder": canonical_folder,
-                "status": "completed",
-                "total_images": len(all_image_paths),
+                "status": "walking",
+                "total_images": 0,
                 "new_images": 0,
                 "processed_images": 0,
                 "failed_images": 0,
                 "error": None,
                 "started_at": now_iso,
-                "completed_at": now_iso,
+                "completed_at": None,
             }
+            self.jobs[scan_id] = walking_job
+            self._job_events[scan_id] = threading.Event()
+
+        try:
+            all_image_paths: list[str] = []
+            for root, _, files in os.walk(canonical_folder):
+                for fn in files:
+                    if not fn.lower().endswith(self.SUPPORTED_EXTENSIONS):
+                        continue
+                    full_path = os.path.join(root, fn)
+                    if approved_roots is not None and not is_path_within_approved_roots(full_path, approved_roots):
+                        logger.warning("Skipping symlink outside approved roots: %s", full_path)
+                        continue
+                    all_image_paths.append(full_path)
+
+            processed_mtimes = self.db.get_processed_images_with_mtime()
+            to_process: list[str] = []
+            modified_paths: set[str] = set()
+            for path in all_image_paths:
+                if path not in processed_mtimes:
+                    to_process.append(path)
+                else:
+                    try:
+                        cur_mtime = os.path.getmtime(path)
+                    except OSError:
+                        continue
+                    if abs(cur_mtime - processed_mtimes[path]) > 1e-6:
+                        to_process.append(path)
+                        modified_paths.add(path)
+        except Exception as exc:
             with self.scan_lock:
-                self.jobs[scan_id] = job
-                ev = threading.Event()
-                ev.set()
-                self._job_events[scan_id] = ev
+                job = self.jobs[scan_id]
+                job["status"] = "failed"
+                job["error"] = str(exc)
+                job["completed_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                self._job_events[scan_id].set()
+                return dict(job)
+
+        if max_new_images is not None and len(to_process) > max_new_images:
+            with self.scan_lock:
+                job = self.jobs[scan_id]
+                job.update(
+                    {
+                        "status": "failed",
+                        "total_images": len(all_image_paths),
+                        "new_images": len(to_process),
+                        "error": (
+                            f"Folder contains {len(to_process)} images to index, exceeding the "
+                            f"headless limit of {max_new_images}."
+                        ),
+                        "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    }
+                )
+                self._job_events[scan_id].set()
+                return dict(job)
+
+        if len(to_process) == 0:
+            with self.scan_lock:
+                job = self.jobs[scan_id]
+                job.update(
+                    {
+                        "status": "completed",
+                        "total_images": len(all_image_paths),
+                        "new_images": 0,
+                        "error": None,
+                        "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    }
+                )
+                self._job_events[scan_id].set()
                 if not self.active_job_id and not self.job_queue and self.pending_tasks == 0:
                     self.is_scanning = False
                 return dict(job)
 
-        job = {
-            "scan_id": scan_id,
-            "folder": canonical_folder,
-            "status": "queued",
-            "total_images": len(all_image_paths),
-            "new_images": len(to_process),
-            "processed_images": 0,
-            "failed_images": 0,
-            "error": None,
-            "started_at": now_iso,
-            "completed_at": None,
-        }
-
         with self.scan_lock:
-            self.jobs[scan_id] = job
-            self._job_events[scan_id] = threading.Event()
+            job = self.jobs[scan_id]
+            job.update(
+                {
+                    "status": "queued",
+                    "total_images": len(all_image_paths),
+                    "new_images": len(to_process),
+                }
+            )
             self._job_items[scan_id] = to_process
             self._modified_paths.update(modified_paths)
             self.job_queue.append(scan_id)
