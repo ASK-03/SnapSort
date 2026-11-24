@@ -246,10 +246,36 @@ class SnapSortMCPBridge:
         return data
 
 
+SERVER_INSTRUCTIONS = (
+    "SnapSort indexes and searches a local on-device photo library. "
+    "Follow these rules when answering photo requests:\n"
+    "1. Resolve person names via list_people first. If multiple face clusters share the same name, ask the user to disambiguate before filtering.\n"
+    "2. For person-only queries (for example 'show me Priya'), call get_person_images so photos without CLIP embeddings are included.\n"
+    "3. For person + scene queries (for example 'Priya at the beach'), pass person_id into search_images(query=..., person_id=...).\n"
+    "4. Check list_approved_folders before browsing or scanning folders; only user-approved root directories are accessible.\n"
+    "5. When calling scan_folder, use wait_seconds (max 30) for small folders and poll get_scan_progress(scan_id) if indexing continues.\n"
+    "6. Only call get_image_preview when visual inspection is needed (requires user opt-in in Settings; returns downscaled EXIF-stripped JPEG)."
+)
+
+_READ_ONLY_ANNOTATIONS: dict[str, bool] = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
+_SCAN_ANNOTATIONS: dict[str, bool] = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
 TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "list_people",
         "description": "List indexed face clusters with assigned names and distinct photo counts.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -262,6 +288,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "get_person_images",
         "description": "Get paginated indexed image paths containing a person cluster ID (includes photos without CLIP embeddings).",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -276,6 +303,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "search_images",
         "description": "Semantic CLIP search across indexed photos, optionally pre-filtered by person_id and/or folder.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -290,6 +318,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "get_image_faces",
         "description": "List face cluster IDs and assigned names detected in an indexed image.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -301,16 +330,19 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "get_library_stats",
         "description": "Get photo count, face cluster count, named-people count, and active indexing status.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "list_approved_folders",
         "description": "List user-approved library root folders and their indexed image counts.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "list_folder_images",
         "description": "List paginated indexed image paths inside an approved folder.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -324,6 +356,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "scan_folder",
         "description": "Scan and index new or modified photos inside a user-approved folder.",
+        "annotations": _SCAN_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -336,6 +369,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "get_scan_progress",
         "description": "Check progress and status of an indexing job.",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -346,6 +380,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "get_image_preview",
         "description": "Fetch a downscaled EXIF-stripped JPEG preview of an indexed image (when enabled in Settings).",
+        "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -486,6 +521,7 @@ def serve_stdio(bridge: SnapSortMCPBridge) -> int:
                         "protocolVersion": client_proto,
                         "capabilities": {"tools": {"listChanged": False}},
                         "serverInfo": {"name": "snapsort-mcp", "version": APP_VERSION},
+                        "instructions": SERVER_INSTRUCTIONS,
                     },
                 }
             )
