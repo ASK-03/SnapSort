@@ -326,32 +326,32 @@
 }
 
 .ss-splash-mark {
-  animation: ss-splash-impact 540ms var(--ease-out) 140ms both;
+  animation: ss-splash-impact 700ms var(--ease-out) 220ms both;
 }
 .ss-splash-blue {
   transform-origin: 112px 226px;
-  animation: ss-splash-blue 420ms var(--ease-drawer) 40ms both;
+  animation: ss-splash-blue 550ms var(--ease-drawer) 120ms both;
 }
 .ss-splash-orange {
   transform-origin: 227px 111px;
-  animation: ss-splash-orange 420ms var(--ease-drawer) 100ms both;
+  animation: ss-splash-orange 550ms var(--ease-drawer) 200ms both;
 }
 .ss-splash-amber {
   transform-origin: 227px 111px;
-  animation: ss-splash-amber 420ms var(--ease-drawer) 150ms both;
+  animation: ss-splash-amber 550ms var(--ease-drawer) 265ms both;
 }
 .ss-splash-coral {
   transform-origin: 100px 91px;
-  animation: ss-splash-coral 420ms var(--ease-drawer) 210ms both;
+  animation: ss-splash-coral 550ms var(--ease-drawer) 345ms both;
 }
 .ss-splash-green {
   transform-origin: 241.5px 247.5px;
-  animation: ss-splash-green 480ms cubic-bezier(0.34, 1.45, 0.64, 1) 280ms both;
+  animation: ss-splash-green 620ms cubic-bezier(0.34, 1.45, 0.64, 1) 435ms both;
 }
 .ss-splash-word {
   overflow: hidden;
   white-space: nowrap;
-  animation: ss-splash-word 500ms var(--ease-out) 380ms both;
+  animation: ss-splash-word 650ms var(--ease-out) 565ms both;
 }
 
 /* Accessibility: Reduced motion & transparency */

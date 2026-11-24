@@ -12,7 +12,7 @@ export const StartupSplash = ({
   const [fadingOut, setFadingOut] = useState(false);
 
   useEffect(() => {
-    const delay = prefersReducedMotion() ? 220 : 1050;
+    const delay = prefersReducedMotion() ? 220 : 1650;
     const timer = window.setTimeout(() => setMinAnimDone(true), delay);
     return () => window.clearTimeout(timer);
   }, []);
@@ -20,7 +20,7 @@ export const StartupSplash = ({
   useEffect(() => {
     if (!minAnimDone || !backendReady) return;
     setFadingOut(true);
-    const doneDelay = prefersReducedMotion() ? 80 : 240;
+    const doneDelay = prefersReducedMotion() ? 80 : 310;
     const timer = window.setTimeout(onFinished, doneDelay);
     return () => window.clearTimeout(timer);
   }, [minAnimDone, backendReady, onFinished]);
@@ -30,7 +30,7 @@ export const StartupSplash = ({
       role="status"
       aria-live="polite"
       aria-label="Starting SnapSort"
-      className={`fixed inset-0 z-[80] bg-bg text-text flex flex-col items-center justify-center gap-5 select-none transition-opacity duration-240 ease-out-ui motion-reduce:transition-none ${
+      className={`fixed inset-0 z-[80] bg-bg text-text flex flex-col items-center justify-center gap-5 select-none transition-opacity duration-300 ease-out-ui motion-reduce:transition-none ${
         fadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
