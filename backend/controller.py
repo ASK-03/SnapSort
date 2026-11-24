@@ -193,6 +193,6 @@ class Controller:
         """
         Run semantic search + face-name reranking.
         """
-        if not query.strip():
+        if not query or not query.strip():
             return []
         return self.search_engine.search(query, top_k=20)
