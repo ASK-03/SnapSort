@@ -565,30 +565,30 @@ export const Lightbox = () => {
                 <div
                   role="menu"
                   aria-label="Save options"
-                  className="save-dropdown absolute right-0 top-full mt-2 w-64 rounded-xl bg-viewer-panel border border-border shadow-2xl p-1.5 z-50 text-left"
+                  className="save-dropdown absolute right-0 top-full mt-1.5 w-56 rounded-xl bg-viewer-panel border border-border shadow-2xl p-1 z-50 text-left"
                 >
                   <button
                     type="button"
                     role="menuitem"
                     disabled={isSaving}
                     onClick={() => void executeSave('copy')}
-                    className="pressable w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className="pressable w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
-                    <span className="w-8 h-8 rounded-lg bg-accent-soft text-accent grid place-items-center shrink-0" aria-hidden="true">
-                      <Copy size={15} />
+                    <span className="w-7 h-7 rounded-lg bg-accent-soft text-accent grid place-items-center shrink-0" aria-hidden="true">
+                      <Copy size={14} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-semibold text-text">Save as Copy</span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-hi text-text-mute">
+                      <div className="flex items-center gap-1.5 leading-tight">
+                        <span className="text-xs font-semibold text-text">Save as Copy</span>
+                        <span className="text-[10px] font-medium px-1.5 py-px rounded bg-surface-hi text-text-mute">
                           Default
                         </span>
                       </div>
-                      <div className="text-[11px] text-text-dim mt-0.5">Keeps the original untouched</div>
+                      <div className="text-[11px] leading-tight text-text-dim">Keeps the original untouched</div>
                     </div>
                   </button>
 
-                  <div className="h-px bg-border my-1.5" />
+                  <div className="h-px bg-border my-1" />
 
                   {!confirmReplaceOpen ? (
                     <button
@@ -596,14 +596,14 @@ export const Lightbox = () => {
                       role="menuitem"
                       disabled={isSaving}
                       onClick={() => setConfirmReplaceOpen(true)}
-                      className="pressable w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left hover:bg-danger/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      className="pressable w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-danger/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
-                      <span className="w-8 h-8 rounded-lg bg-danger/15 text-danger grid place-items-center shrink-0" aria-hidden="true">
-                        <AlertTriangle size={15} />
+                      <span className="w-7 h-7 rounded-lg bg-danger/15 text-danger grid place-items-center shrink-0" aria-hidden="true">
+                        <AlertTriangle size={14} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-semibold text-danger">Replace Original</div>
-                        <div className="text-[11px] text-text-dim mt-0.5">Overwrites file on disk</div>
+                        <div className="text-xs font-semibold leading-tight text-danger">Replace Original</div>
+                        <div className="text-[11px] leading-tight text-text-dim">Overwrites file on disk</div>
                       </div>
                     </button>
                   ) : (
