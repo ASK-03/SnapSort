@@ -14,8 +14,9 @@ export const TopBar = () => {
   const themeAction = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
 
   useEffect(() => {
-    window.electronAPI?.setWindowTheme(theme);
-  }, [theme]);
+    const windowTheme = viewerOpen ? (theme === 'dark' ? 'viewer' : 'viewerLight') : theme;
+    window.electronAPI?.setWindowTheme(windowTheme);
+  }, [theme, viewerOpen]);
 
   const showExample = focused && !searchQuery && !viewerOpen;
   useEffect(() => {
@@ -47,9 +48,13 @@ export const TopBar = () => {
   }, [viewerOpen]);
 
   const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
     const root = document.documentElement;
     root.classList.add('theme-switching');
-    setTheme(theme === 'dark' ? 'light' : 'dark');
+    root.classList.toggle('dark', next === 'dark');
+    setTheme(next);
+    window.electronAPI?.setWindowTheme(viewerOpen ? (next === 'dark' ? 'viewer' : 'viewerLight') : next);
+    void root.offsetHeight;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => root.classList.remove('theme-switching'));
     });

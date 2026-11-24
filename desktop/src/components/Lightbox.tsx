@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { LIGHTBOX_ROOT_VT, VIEWER_IMAGE_VT, withViewTransition } from '../lib/viewTransition';
 import {
   FILTER_PRESETS,
@@ -33,7 +34,6 @@ import {
   computeCssTransform,
   createDefaultEditState,
   hasCustomCrop,
-  isEditDirty,
   type CropRect,
   type EditState,
   type EditTool,
@@ -139,11 +139,9 @@ export const Lightbox = () => {
 
   const rootRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const cropBoxRef = useRef<HTMLDivElement>(null);
-  const bottomBandRef = useRef<HTMLDivElement>(null);
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const dragState = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
@@ -193,11 +191,11 @@ export const Lightbox = () => {
   }, [zoomAt]);
 
   const goTo = useCallback((path: string, instant = false) => {
-    withViewTransition(() => {
+    withViewTransition(() => flushSync(() => {
       setLightboxImage(path);
       setViewerZoom(1);
       setViewerPan({ x: 0, y: 0 });
-    }, instant);
+    }), instant);
   }, [setLightboxImage, setViewerZoom, setViewerPan]);
 
   const handleNext = useCallback((instant = false) => {
@@ -219,12 +217,12 @@ export const Lightbox = () => {
     setIsFullscreen(false);
     setSaveMenuOpen(false);
     setConfirmReplaceOpen(false);
-    withViewTransition(() => {
+    withViewTransition(() => flushSync(() => {
       setLightboxImage(null);
       setViewerPanel('none');
       setViewerZoom(1);
       setViewerPan({ x: 0, y: 0 });
-    });
+    }));
   }, [setLightboxImage, setViewerPanel, setViewerZoom, setViewerPan]);
 
   const openFace = useCallback((f: { id: number; name: string | null }) => {
@@ -234,9 +232,11 @@ export const Lightbox = () => {
   }, [close, setSelectedPerson, setViewMode]);
 
   useEffect(() => {
-    if (lightboxImage) {
+    const isOpen = Boolean(lightboxImage);
+    if (isOpen && !wasOpenRef.current) {
       closeBtnRef.current?.focus();
     }
+    wasOpenRef.current = isOpen;
   }, [lightboxImage]);
 
   useEffect(() => {
@@ -279,7 +279,9 @@ export const Lightbox = () => {
         close();
         return;
       }
-      if (viewerPanel === 'none') {
+      if (viewerPanel !== 'edit') {
+        const tag = (document.activeElement as HTMLElement | null)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         if (e.key === 'ArrowRight') {
           e.preventDefault();
           handleNext(true);
@@ -438,7 +440,6 @@ export const Lightbox = () => {
   const imgSrc = ver ? `${getImageUrl(lightboxImage)}&v=${ver}` : getImageUrl(lightboxImage);
   const previewSrc = ver ? `${getPreviewUrl(lightboxImage)}&v=${ver}` : getPreviewUrl(lightboxImage);
   const rightReserve = viewerPanel !== 'none' ? 'md:right-[320px]' : '';
-  const dirty = isEditDirty(editState);
 
   const activeCssFilter = viewerPanel === 'edit'
     ? computeCssFilter(editState.filterPreset, editState.adjustments)
@@ -463,7 +464,13 @@ export const Lightbox = () => {
       style={{ viewTransitionName: LIGHTBOX_ROOT_VT }}
     >
       {/* z-30 keeps viewer header and Save dropdown strictly above z-10 right sidebar drawers */}
-      <header className="window-drag relative z-30 h-14 shrink-0 bg-viewer-header border-b border-border grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-5">
+      <header
+        className="window-drag relative z-30 h-14 shrink-0 bg-viewer-header border-b border-border grid grid-cols-[1fr_auto_1fr] items-center gap-3"
+        style={{
+          paddingLeft: 'calc(20px + var(--window-left))',
+          paddingRight: 'calc(20px + var(--window-right))',
+        }}
+      >
         <div className="flex items-center gap-3">
           <IconButton
             buttonRef={closeBtnRef}
@@ -518,7 +525,7 @@ export const Lightbox = () => {
               <div className="inline-flex items-center rounded-full shadow-sm">
                 <button
                   type="button"
-                  disabled={isSaving || !dirty}
+                  disabled={isSaving}
                   onClick={() => {
                     if (saveMode === 'replace') {
                       setSaveMenuOpen(true);
@@ -527,7 +534,7 @@ export const Lightbox = () => {
                       void executeSave('copy');
                     }
                   }}
-                  className={`pressable h-8 pl-3.5 pr-2.5 rounded-l-full text-xs font-semibold disabled:opacity-45 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  className={`pressable h-8 pl-3.5 pr-2.5 rounded-l-full text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                     saveMode === 'replace'
                       ? 'bg-danger text-on-danger'
                       : 'bg-accent text-on-accent'
@@ -543,7 +550,7 @@ export const Lightbox = () => {
                   aria-expanded={saveMenuOpen}
                   aria-haspopup="menu"
                   onClick={() => setSaveMenuOpen((prev) => !prev)}
-                  className={`pressable h-8 pl-1.5 pr-2.5 rounded-r-full disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  className={`pressable h-8 pl-1.5 pr-2.5 rounded-r-full disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                     saveMode === 'replace'
                       ? 'bg-danger text-on-danger'
                       : 'bg-accent text-on-accent'
@@ -557,19 +564,19 @@ export const Lightbox = () => {
                 <div
                   role="menu"
                   aria-label="Save options"
-                  className="save-dropdown absolute right-0 top-full mt-2 w-72 rounded-xl bg-surface border border-border shadow-2xl p-1.5 z-50 text-left"
+                  className="save-dropdown absolute right-0 top-full mt-2 w-72 rounded-xl bg-viewer-panel border border-border shadow-2xl p-1.5 z-50 text-left"
                 >
                   <button
                     type="button"
                     role="menuitem"
-                    disabled={!dirty}
+                    disabled={isSaving}
                     onClick={() => void executeSave('copy')}
-                    className="pressable w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-surface-hi disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    className="pressable w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     <Copy size={15} className="text-text-dim mt-0.5 shrink-0" />
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-text">Save as Copy</div>
-                      <div className="text-[11px] text-text-mute">Keeps the original file untouched</div>
+                      <div className="text-[11px] text-text-dim">Keeps the original file untouched</div>
                     </div>
                   </button>
 
@@ -577,14 +584,14 @@ export const Lightbox = () => {
                     <button
                       type="button"
                       role="menuitem"
-                      disabled={!dirty}
+                      disabled={isSaving}
                       onClick={() => setConfirmReplaceOpen(true)}
-                      className="pressable w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-surface-hi disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      className="pressable w-full flex items-start gap-2.5 px-3 py-2.5 rounded-lg hover:bg-surface-hi disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                       <AlertTriangle size={15} className="text-danger mt-0.5 shrink-0" />
                       <div className="min-w-0">
                         <div className="text-xs font-semibold text-danger">Replace Original</div>
-                        <div className="text-[11px] text-text-mute">Overwrites original file on disk</div>
+                        <div className="text-[11px] text-text-dim">Overwrites original file on disk</div>
                       </div>
                     </button>
                   ) : (
@@ -638,28 +645,28 @@ export const Lightbox = () => {
 
       <div className="relative flex-1 min-h-0 overflow-hidden">
         <div
-          ref={stageRef}
           onClick={(e) => {
             if (viewerZoom > 1) return;
-            if (
-              e.target === stageRef.current ||
-              e.target === canvasRef.current ||
-              e.target === viewportRef.current ||
-              e.target === bottomBandRef.current
-            ) {
-              close();
+            const target = e.target as HTMLElement | null;
+            if (!target) return;
+            if (target.closest('img, button, input, a, [role="menu"], [role="region"], [data-keep-open="true"]')) {
+              return;
             }
+            close();
           }}
           className={`absolute inset-y-0 left-0 right-0 flex flex-col min-w-0 overflow-hidden ${rightReserve}`}
         >
-          <div ref={canvasRef} className="flex-1 relative flex items-center justify-center min-h-0 px-14 py-4">
+          <div className="flex-1 relative flex items-center justify-center min-h-0 px-14 py-4">
             {hasPrev && (
               <button
                 type="button"
-                onClick={() => handlePrev(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrev(false);
+                }}
                 aria-label="Previous photo"
-                className={`pressable absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-viewer-panel border border-border text-text hover:bg-surface-hi grid place-items-center z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-[opacity,background-color] duration-150 motion-reduce:transition-none ${
-                  viewerPanel !== 'none' ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                className={`pressable absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-viewer-panel border border-border text-text hover:bg-surface-hi grid place-items-center z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-[opacity,background-color] duration-150 motion-reduce:transition-none ${
+                  viewerPanel === 'edit' ? 'opacity-0 pointer-events-none' : 'opacity-100'
                 }`}
               >
                 <ChevronLeft size={18} />
@@ -767,10 +774,13 @@ export const Lightbox = () => {
             {hasNext && (
               <button
                 type="button"
-                onClick={() => handleNext(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNext(false);
+                }}
                 aria-label="Next photo"
-                className={`pressable absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-viewer-panel border border-border text-text hover:bg-surface-hi grid place-items-center z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-[opacity,background-color] duration-150 motion-reduce:transition-none ${
-                  viewerPanel !== 'none' ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                className={`pressable absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-viewer-panel border border-border text-text hover:bg-surface-hi grid place-items-center z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-[opacity,background-color] duration-150 motion-reduce:transition-none ${
+                  viewerPanel === 'edit' ? 'opacity-0 pointer-events-none' : 'opacity-100'
                 }`}
               >
                 <ChevronRight size={18} />
@@ -778,9 +788,12 @@ export const Lightbox = () => {
             )}
           </div>
 
-          <div ref={bottomBandRef} className="relative z-10 shrink-0 flex flex-col items-center gap-2.5 pb-4 pt-1 px-4">
+          <div className="relative z-10 shrink-0 flex flex-col items-center gap-2.5 pb-4 pt-1 px-4">
             {viewerPanel === 'edit' && editState.tool === 'filters' ? (
-              <div className="flex items-center gap-3 overflow-x-auto max-w-full py-1 px-2">
+              <div
+                data-keep-open="true"
+                className="flex items-center gap-3 overflow-x-auto max-w-full py-1 px-2"
+              >
                 {FILTER_PRESETS.map((preset) => {
                   const active = editState.filterPreset === preset.id;
                   return (
@@ -829,7 +842,10 @@ export const Lightbox = () => {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 bg-viewer-panel border border-border rounded-full px-2.5 py-1 shadow-sm">
+                <div
+                  data-keep-open="true"
+                  className="flex items-center gap-2 bg-viewer-panel border border-border rounded-full px-2.5 py-1 shadow-sm"
+                >
                   <ZoomBtn ariaLabel="Zoom out" onClick={() => zoomAtCenter(viewerZoom - 0.2)}>
                     <Minus size={13} />
                   </ZoomBtn>

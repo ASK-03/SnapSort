@@ -70,6 +70,32 @@ export const saveEditedImage = async (payload: SaveEditPayload) => {
   return data;
 };
 
+export interface ImageMetadata {
+  filename: string;
+  path: string;
+  format: string;
+  width: number;
+  height: number;
+  megapixels: number;
+  file_size_bytes: number;
+  modified_at: string;
+  date_taken: string | null;
+  camera: string | null;
+  lens: string | null;
+  focal_length: string | null;
+  aperture: string | null;
+  shutter_speed: string | null;
+  iso: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_label: string | null;
+}
+
+export const getImageMetadata = async (path: string) => {
+  const { data } = await api.get<ImageMetadata>('/images/metadata', { params: { path } });
+  return data;
+};
+
 export const getImageUrl = (path: string) => `${BASE_URL}/media/image?path=${encodeURIComponent(path)}`;
 export const getPreviewUrl = (path: string) => `${BASE_URL}/media/preview?path=${encodeURIComponent(path)}`;
 export const getFaceThumbnailUrl = (faceId: number) => `${BASE_URL}/media/thumbnail/${faceId}`;

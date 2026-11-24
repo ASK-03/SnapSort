@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, session, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawn, execFile, ChildProcess } from 'child_process'
@@ -111,15 +111,23 @@ function stopPythonBackend() {
 // titlebar color even when SnapSort is using the opposite theme.
 const titleBarColors = {
   light: { color: '#F5F4F1', symbolColor: '#484B50' },
-  dark: { color: '#202124', symbolColor: '#DDDFE3' },
-  viewer: { color: '#0A0B0C', symbolColor: '#ECEDEE' },
+  dark: { color: '#1E1F22', symbolColor: '#DDDFE3' },
+  viewer: { color: '#0D0E10', symbolColor: '#ECEDEE' },
+  viewerLight: { color: '#FFFFFF', symbolColor: '#484B50' },
+}
+
+const windowBgColors: Record<keyof typeof titleBarColors, string> = {
+  light: '#FAF9F6',
+  dark: '#141517',
+  viewer: '#0A0B0C',
+  viewerLight: '#F6F5F1',
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    backgroundColor: '#141517',
+    backgroundColor: windowBgColors.dark,
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'darwin'
       ? true
@@ -130,6 +138,21 @@ function createWindow() {
     },
   })
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false)
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const isLocal = url.startsWith('file://') || (VITE_DEV_SERVER_URL && url.startsWith(VITE_DEV_SERVER_URL))
+    if (!isLocal && /^https?:\/\//i.test(url)) {
+      event.preventDefault()
+      void shell.openExternal(url)
+    }
+  })
 
   if (VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL)
@@ -173,7 +196,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('getBackendPort', () => backendPort)
 
   ipcMain.on('window:set-control-theme', (event, theme: keyof typeof titleBarColors) => {
-    if (process.platform !== 'darwin' && mainWindow && event.sender === mainWindow.webContents && Object.hasOwn(titleBarColors, theme)) {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !Object.hasOwn(titleBarColors, theme)) return
+    mainWindow.setBackgroundColor(windowBgColors[theme])
+    if (process.platform !== 'darwin') {
       mainWindow.setTitleBarOverlay(titleBarColors[theme])
     }
   })

@@ -11,6 +11,7 @@ import { Lightbox } from './components/Lightbox';
 import { ContextMenu } from './components/ContextMenu';
 import { Settings } from './components/Settings';
 import { About } from './components/About';
+import { StartupSplash } from './components/StartupSplash';
 
 function App() {
   const {
@@ -27,6 +28,11 @@ function App() {
   } = useAppStore();
   const query = searchQuery.trim();
   const [isReady, setIsReady] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   const loadImages = useCallback(async () => {
     try {
@@ -76,20 +82,10 @@ function App() {
     loadImages();
   }, [isReady, loadImages]);
 
-  if (!isReady) {
-    return (
-      <div className={theme === 'dark' ? 'dark' : ''}>
-        <div className="h-dvh w-screen bg-bg flex items-center justify-center">
-          <div className="text-sm font-medium text-text-dim">Starting backend…</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={theme === 'dark' ? 'dark' : ''}>
-      <div className="flex h-dvh flex-col bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
-        <TopBar />
+    <div className="flex h-dvh flex-col bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
+      <TopBar />
+      {isReady ? (
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main className="relative flex min-w-0 flex-1 overflow-hidden">
@@ -103,10 +99,20 @@ function App() {
             {query && <div className="absolute inset-0 flex"><Gallery query={query} /></div>}
           </main>
         </div>
+      ) : (
+        <div className="flex-1 bg-bg" />
+      )}
 
-        <Lightbox />
-        <ContextMenu />
-      </div>
+      {isReady && (
+        <>
+          <Lightbox />
+          <ContextMenu />
+        </>
+      )}
+
+      {!splashDone && (
+        <StartupSplash backendReady={isReady} onFinished={() => setSplashDone(true)} />
+      )}
     </div>
   );
 }

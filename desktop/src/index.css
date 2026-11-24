@@ -43,15 +43,15 @@
   --ss-surface: #1A1B1E;
   --ss-surface-hi: #232529;
   --ss-border: #2C2E33;
-  --ss-accent: #3B82F6;
-  --ss-accent-soft: rgba(59, 130, 246, 0.16);
-  --ss-on-accent: #0B1220;
+  --ss-accent: #2E6FF2;
+  --ss-accent-soft: rgba(46, 111, 242, 0.18);
+  --ss-on-accent: #FFFFFF;
   --ss-text: #ECEDEE;
   --ss-text-dim: #B2B6BD;
   --ss-text-mute: #93979E;
   --ss-success: #5EBF80;
   --ss-danger: #F87171;
-  --ss-on-danger: #1A0B0B;
+  --ss-on-danger: #FFFFFF;
   --ss-img-outline: oklch(1 0 0 / 0.1);
   --ss-topbar-glass: rgba(30, 31, 34, 0.84);
 
@@ -66,21 +66,23 @@
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-bg text-text antialiased;
   }
 }
 
+.theme-switching,
 .theme-switching *,
 .theme-switching *::before,
 .theme-switching *::after {
   transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
   animation-duration: 0ms !important;
 }
 
 /* Interactive feedback & framing utilities */
 .pressable {
-  transition: transform 140ms var(--ease-out),
+  transition: scale 140ms var(--ease-out),
               background-color 150ms ease,
               color 150ms ease,
               border-color 150ms ease,
@@ -88,17 +90,17 @@
   -webkit-tap-highlight-color: transparent;
 }
 .pressable:not(:disabled):active {
-  transform: scale(0.96);
+  scale: 0.96;
 }
 
 .tile-pressable {
-  transition: transform 140ms var(--ease-out),
+  transition: scale 140ms var(--ease-out),
               box-shadow 150ms ease,
               border-color 150ms ease;
   -webkit-tap-highlight-color: transparent;
 }
 .tile-pressable:not(:disabled):active {
-  transform: scale(0.985);
+  scale: 0.985;
 }
 
 .img-frame-outline {
@@ -283,8 +285,89 @@
   animation: viewer-image-in 180ms var(--ease-out) both;
 }
 
+::view-transition-group(person-avatar),
+::view-transition-image-pair(person-avatar),
+::view-transition-old(person-avatar),
+::view-transition-new(person-avatar) {
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+/* Startup splash choreography matching light-tour logo assembly */
+@keyframes ss-splash-blue {
+  from { opacity: 0; transform: translate(-70px, 70px) rotate(-14deg) scale(0.45); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-orange {
+  from { opacity: 0; transform: translate(22px, 22px) rotate(-20deg) scale(0.32); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-amber {
+  from { opacity: 0; transform: translate(-22px, -22px) rotate(20deg) scale(0.32); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-coral {
+  from { opacity: 0; transform: translate(-70px, -70px) rotate(-26deg) scale(0.45); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-green {
+  0% { opacity: 0; transform: translate(0, -56px) scale(0.2); }
+  70% { opacity: 1; transform: translate(0, 3px) scale(1.06); }
+  100% { opacity: 1; transform: translate(0, 0) scale(1); }
+}
+@keyframes ss-splash-impact {
+  0% { transform: scale(0.92); }
+  55% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes ss-splash-word {
+  from { opacity: 0; max-width: 0px; transform: translateX(-24px); }
+  to { opacity: 1; max-width: 260px; transform: translateX(0); }
+}
+
+.ss-splash-mark {
+  animation: ss-splash-impact 540ms var(--ease-out) 140ms both;
+}
+.ss-splash-blue {
+  transform-origin: 112px 226px;
+  animation: ss-splash-blue 420ms var(--ease-drawer) 40ms both;
+}
+.ss-splash-orange {
+  transform-origin: 227px 111px;
+  animation: ss-splash-orange 420ms var(--ease-drawer) 100ms both;
+}
+.ss-splash-amber {
+  transform-origin: 227px 111px;
+  animation: ss-splash-amber 420ms var(--ease-drawer) 150ms both;
+}
+.ss-splash-coral {
+  transform-origin: 100px 91px;
+  animation: ss-splash-coral 420ms var(--ease-drawer) 210ms both;
+}
+.ss-splash-green {
+  transform-origin: 241.5px 247.5px;
+  animation: ss-splash-green 480ms cubic-bezier(0.34, 1.45, 0.64, 1) 280ms both;
+}
+.ss-splash-word {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: ss-splash-word 500ms var(--ease-out) 380ms both;
+}
+
 /* Accessibility: Reduced motion & transparency */
 @media (prefers-reduced-motion: reduce) {
+  .ss-splash-mark,
+  .ss-splash-blue,
+  .ss-splash-orange,
+  .ss-splash-amber,
+  .ss-splash-coral,
+  .ss-splash-green,
+  .ss-splash-word {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    max-width: none !important;
+  }
   .reveal-soft,
   .save-dropdown {
     transform: none !important;

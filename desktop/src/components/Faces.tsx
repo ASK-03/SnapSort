@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Users, Check, Merge } from 'lucide-react';
+import { Users, Check, Merge, Pencil, X } from 'lucide-react';
 import { useAppStore } from '../store';
 import { getFaceThumbnailUrl, api, scanFolder } from '../api';
 import { withViewTransition } from '../lib/viewTransition';
@@ -32,14 +32,16 @@ const PersonCard = ({
       aria-label={countText ? `Open ${face.name}, ${countText}` : `Open ${face.name}`}
       className="tile-pressable group bg-surface border border-border hover:border-text-mute rounded-xl p-3 flex flex-col items-center gap-2.5 text-center min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
-      <div className="w-full aspect-square rounded-full overflow-hidden bg-surface-hi img-frame-outline">
+      <div
+        data-face-avatar
+        style={face.id === personNav.returnId ? { viewTransitionName: PERSON_AVATAR_VT } : undefined}
+        className="w-full aspect-square rounded-full overflow-hidden bg-surface-hi img-frame-outline"
+      >
         <img
           src={getFaceThumbnailUrl(face.id)}
           alt={face.name}
           loading="lazy"
-          data-face-avatar
-          style={face.id === personNav.returnId ? { viewTransitionName: PERSON_AVATAR_VT } : undefined}
-          className="hover-zoom-img w-full h-full object-cover block"
+          className="hover-zoom-img w-full h-full rounded-full object-cover block"
         />
       </div>
       <div className="w-full min-w-0 flex flex-col gap-0.5">
@@ -110,41 +112,81 @@ const FaceClusterCard = ({
         )}
       </button>
 
-      <div className="p-2 flex flex-col gap-0.5 min-w-0">
+      <div className="p-2 flex flex-col gap-1 min-w-0">
         {editing ? (
-          <input
-            type="text"
-            autoFocus
-            value={name}
-            aria-label="Person name"
-            placeholder="Name…"
-            onChange={(e) => setName(e.target.value)}
-            onBlur={() => void commit()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void commit();
-              }
-              if (e.key === 'Escape') {
+          <div className="flex items-center gap-1 min-w-0">
+            <input
+              type="text"
+              autoFocus
+              value={name}
+              aria-label="Person name"
+              placeholder="Enter name"
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => void commit()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void commit();
+                }
+                if (e.key === 'Escape') {
+                  setName(face.name || '');
+                  setEditing(false);
+                }
+              }}
+              className="flex-1 min-w-0 bg-bg border border-accent rounded-md px-1.5 py-0.5 text-xs text-text focus:outline-none placeholder:text-text-mute"
+            />
+            <button
+              type="button"
+              aria-label="Save name"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void commit()}
+              className="pressable w-6 h-6 rounded-md bg-accent text-on-accent grid place-items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Check size={12} />
+            </button>
+            <button
+              type="button"
+              aria-label="Cancel rename"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
                 setName(face.name || '');
                 setEditing(false);
-              }
-            }}
-            className="w-full bg-bg border border-accent rounded px-1.5 py-0.5 text-[13px] text-text focus:outline-none placeholder:text-text-mute"
-          />
+              }}
+              className="pressable w-6 h-6 rounded-md bg-surface-hi border border-border text-text-mute hover:text-text grid place-items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : face.name ? (
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <span className="text-[13px] font-medium text-text truncate">{face.name}</span>
+            <button
+              type="button"
+              aria-label={`Rename ${face.name}`}
+              title="Rename person"
+              onClick={() => {
+                setName(face.name || '');
+                setEditing(true);
+              }}
+              className="pressable w-6 h-6 rounded-md text-text-mute hover:text-accent hover:bg-surface-hi grid place-items-center shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Pencil size={12} />
+            </button>
+          </div>
         ) : (
           <button
             type="button"
             onClick={() => {
-              setName(face.name || '');
+              setName('');
               setEditing(true);
             }}
-            className="text-left text-[13px] font-medium text-text hover:text-accent truncate rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="pressable w-full flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-hi border border-dashed border-border text-text-dim hover:border-accent hover:text-accent text-xs font-medium text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            {face.name || 'Name person…'}
+            <Pencil size={12} aria-hidden="true" className="shrink-0" />
+            <span className="truncate">Add name</span>
           </button>
         )}
-        <span className="text-xs text-text-mute tabular-nums">
+        <span className="text-xs text-text-mute tabular-nums px-0.5">
           {face.count !== undefined ? pluralPhotos(face.count) : `Cluster #${face.id}`}
         </span>
       </div>
@@ -183,8 +225,8 @@ export const Faces = () => {
     document.querySelectorAll<HTMLElement>('[data-face-avatar]').forEach((a) => {
       a.style.viewTransitionName = '';
     });
-    const avatar = el.querySelector('img') ?? el;
-    (avatar as HTMLElement).style.viewTransitionName = PERSON_AVATAR_VT;
+    const avatar = el.querySelector<HTMLElement>('[data-face-avatar]') ?? el;
+    avatar.style.viewTransitionName = PERSON_AVATAR_VT;
     withViewTransition(() => flushSync(() => setSelectedPerson({ id: face.id, name: face.name })));
   };
 
@@ -246,11 +288,11 @@ export const Faces = () => {
   return (
     <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
       <header className="flex shrink-0 items-baseline justify-between gap-4 px-6 pt-5 pb-3.5">
-        <div className="flex items-baseline gap-2.5 min-w-0">
-          <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text">
+        <div className="flex items-baseline gap-3 min-w-0">
+          <h1 className="text-3xl leading-tight font-semibold tracking-[-0.025em] text-text">
             {isPeople ? 'People' : 'Faces'}
           </h1>
-          <span className="text-[13px] text-text-mute tabular-nums">· {countLabel}</span>
+          <span className="text-sm text-text-mute tabular-nums">· {countLabel}</span>
         </div>
 
         {!isPeople && selectedFaceIds.length > 1 && (

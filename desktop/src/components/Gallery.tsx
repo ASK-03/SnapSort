@@ -3,6 +3,7 @@ import { getPreviewUrl, getSearch, scanFolder } from '../api';
 import { X, Grid2X2, Folder, Search, FolderPlus } from 'lucide-react';
 import { withViewTransition } from '../lib/viewTransition';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { VirtuosoGrid } from 'react-virtuoso';
 
 const MISSING_TILE =
@@ -88,7 +89,7 @@ export const PhotoGrid = ({ paths, cols }: { paths: string[]; cols: number }) =>
               }`}
               onClick={() => {
                 setLastLightboxTrigger(path);
-                withViewTransition(() => setLightboxImage(path, paths));
+                withViewTransition(() => flushSync(() => setLightboxImage(path, paths)));
               }}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -162,9 +163,9 @@ function SearchResults({ query, cols, zoom, onZoomChange }: {
   return (
     <>
       <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-3.5">
-        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 min-w-0">
-          <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text">Search results</h1>
-          <span role="status" aria-live="polite" aria-atomic="true" className="text-[13px] text-text-mute tabular-nums">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+          <h1 className="text-3xl leading-tight font-semibold tracking-[-0.025em] text-text">Search results</h1>
+          <span role="status" aria-live="polite" aria-atomic="true" className="text-sm text-text-mute tabular-nums">
             {summary ? `· ${summary}` : ''}
           </span>
         </div>
@@ -239,11 +240,11 @@ export const Gallery = ({ query }: { query?: string }) => {
       ) : (
         <>
           <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-3.5">
-            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 min-w-0">
-              <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text truncate">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+              <h1 className="text-3xl leading-tight font-semibold tracking-[-0.025em] text-text truncate">
                 {folderFilter ? basename(folderFilter) : 'All Photos'}
               </h1>
-              <span className="text-[13px] text-text-mute tabular-nums">
+              <span className="text-sm text-text-mute tabular-nums">
                 · {pluralPhotos(displayImages.length)}
               </span>
               {folderFilter && (

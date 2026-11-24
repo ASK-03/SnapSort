@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { FolderOpen, Copy } from 'lucide-react';
 import { useAppStore } from '../store';
 import { withViewTransition } from '../lib/viewTransition';
@@ -74,7 +75,7 @@ export const ContextMenu = () => {
         type="button"
         role="menuitem"
         onClick={() => {
-          withViewTransition(() => setLightboxImage(contextMenu.imagePath, contextMenu.paths));
+          withViewTransition(() => flushSync(() => setLightboxImage(contextMenu.imagePath, contextMenu.paths)));
           setContextMenu(null);
         }}
         className="pressable flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium text-left text-text hover:bg-surface-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"

@@ -52,12 +52,14 @@ export const PersonView = () => {
         >
           <ArrowLeft size={18} />
         </button>
-        <div className="w-20 h-20 rounded-full overflow-hidden bg-surface-hi img-frame-outline shrink-0">
+        <div
+          style={{ viewTransitionName: PERSON_AVATAR_VT }}
+          className="w-20 h-20 rounded-full overflow-hidden bg-surface-hi img-frame-outline shrink-0"
+        >
           <img
             src={getFaceThumbnailUrl(selectedPerson.id)}
             alt={selectedPerson.name}
-            style={{ viewTransitionName: PERSON_AVATAR_VT }}
-            className="w-full h-full object-cover block"
+            className="w-full h-full rounded-full object-cover block"
           />
         </div>
         <div className="min-w-0">
@@ -72,11 +74,11 @@ export const PersonView = () => {
                 if (e.key === 'Enter') void save();
                 if (e.key === 'Escape') setEditing(false);
               }}
-              className="text-2xl font-semibold tracking-[-0.02em] text-text bg-surface-hi border border-accent rounded-lg px-2 py-0.5 focus:outline-none"
+              className="text-3xl font-semibold tracking-[-0.025em] text-text bg-surface-hi border border-accent rounded-lg px-2 py-0.5 focus:outline-none"
             />
           ) : (
             <div className="flex items-center gap-2.5 min-w-0">
-              <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text truncate">
+              <h1 className="text-3xl leading-tight font-semibold tracking-[-0.025em] text-text truncate">
                 {selectedPerson.name}
               </h1>
               <button
@@ -92,7 +94,7 @@ export const PersonView = () => {
               </button>
             </div>
           )}
-          <p className="text-[13px] text-text-mute mt-1 tabular-nums">{pluralPhotos(paths.length)}</p>
+          <p className="text-sm text-text-mute mt-1 tabular-nums">{pluralPhotos(paths.length)}</p>
         </div>
       </header>
       <div className="flex-1 px-6 pb-2 overflow-hidden">
