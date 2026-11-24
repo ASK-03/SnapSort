@@ -557,7 +557,12 @@ export const Lightbox = () => {
                       : 'bg-accent text-on-accent'
                   }`}
                 >
-                  <ChevronDown size={13} />
+                  <ChevronDown
+                    size={13}
+                    className={`transition-transform duration-150 ease-out-ui motion-reduce:transition-none ${
+                      saveMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
                 </button>
               </div>
 
@@ -565,7 +570,7 @@ export const Lightbox = () => {
                 <div
                   role="menu"
                   aria-label="Save options"
-                  className="save-dropdown absolute right-0 top-full mt-1.5 w-56 rounded-xl bg-viewer-panel border border-border shadow-2xl p-1 z-50 text-left"
+                  className="save-dropdown origin-top-right absolute right-0 top-full mt-1.5 w-[268px] rounded-xl bg-viewer-panel border border-border shadow-2xl p-1.5 z-50 text-left"
                 >
                   <button
                     type="button"
@@ -578,9 +583,9 @@ export const Lightbox = () => {
                       <Copy size={14} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 leading-tight">
+                      <div className="flex items-center justify-between gap-2 leading-tight">
                         <span className="text-xs font-semibold text-text">Save as Copy</span>
-                        <span className="text-[10px] font-medium px-1.5 py-px rounded bg-surface-hi text-text-mute">
+                        <span className="text-[10px] font-medium px-1.5 py-px rounded bg-surface-hi text-text-mute shrink-0">
                           Default
                         </span>
                       </div>
