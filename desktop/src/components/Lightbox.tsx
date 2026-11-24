@@ -892,26 +892,22 @@ export const Lightbox = () => {
           </div>
         </div>
 
-        <div className="absolute inset-y-0 right-0 z-10 flex pointer-events-none">
-          <div className="pointer-events-auto h-full">
-            <EditPanel
-              open={viewerPanel === 'edit'}
-              state={editState}
-              saveMode={saveMode}
-              imageAspect={imageAspect}
-              isSaving={isSaving}
-              statusMessage={statusMessage}
-              errorMessage={errorMessage}
-              onChange={setEditState}
-              onResetAll={resetEditor}
-              onCancel={() => {
-                resetEditor();
-                setViewerPanel('none');
-              }}
-              onSaveCopy={() => void executeSave('copy')}
-            />
-          </div>
-        </div>
+        <EditPanel
+          open={viewerPanel === 'edit'}
+          state={editState}
+          saveMode={saveMode}
+          imageAspect={imageAspect}
+          isSaving={isSaving}
+          statusMessage={statusMessage}
+          errorMessage={errorMessage}
+          onChange={setEditState}
+          onResetAll={resetEditor}
+          onCancel={() => {
+            resetEditor();
+            setViewerPanel('none');
+          }}
+          onSaveCopy={() => void executeSave('copy')}
+        />
         <InfoPanel imagePath={lightboxImage} faces={faces} open={viewerPanel === 'info'} onFaceClick={openFace} />
       </div>
     </div>

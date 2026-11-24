@@ -82,7 +82,7 @@ export const EditPanel = ({
       aria-label="Photo editor"
       aria-hidden={!open}
       inert={!open}
-      className={`w-80 h-full bg-viewer-panel border-l border-border flex flex-col justify-between overflow-y-auto overscroll-contain transition-[transform,opacity] ease-drawer motion-reduce:transition-none ${
+      className={`absolute inset-y-0 right-0 z-10 w-80 bg-viewer-panel border-l border-border flex flex-col justify-between overflow-y-auto overscroll-contain transition-[transform,opacity] ease-drawer motion-reduce:transition-none ${
         open ? 'translate-x-0 opacity-100 duration-240' : 'translate-x-full opacity-0 pointer-events-none duration-150'
       }`}
     >
