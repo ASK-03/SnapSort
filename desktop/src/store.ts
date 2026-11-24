@@ -11,15 +11,19 @@ interface AppState {
   setSearchQuery: (query: string) => void;
   isScanning: boolean;
   setIsScanning: (scanning: boolean) => void;
+  scanningFolder: string | null;
+  setScanningFolder: (folder: string | null) => void;
   progress: { total: number; processed: number; pending: number };
   setProgress: (p: { total: number; processed: number; pending: number }) => void;
-  
+
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   lightboxImage: string | null;
   lightboxPaths: string[];
   setLightboxImage: (image: string | null, paths?: string[]) => void;
-  
+  lastLightboxTrigger: string | null;
+  setLastLightboxTrigger: (path: string | null) => void;
+
   stats: { photos: number; faces: number; people: number };
   setStats: (stats: { photos: number; faces: number; people: number }) => void;
 
@@ -40,6 +44,9 @@ interface AppState {
 
   folderFilter: string | null;
   setFolderFilter: (folder: string | null) => void;
+
+  imageVersions: Record<string, number>;
+  bumpImageVersion: (path: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -51,18 +58,22 @@ export const useAppStore = create<AppState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   isScanning: false,
   setIsScanning: (isScanning) => set({ isScanning }),
+  scanningFolder: null,
+  setScanningFolder: (scanningFolder) => set({ scanningFolder }),
   progress: { total: 0, processed: 0, pending: 0 },
   setProgress: (progress) => set({ progress }),
-  
+
   viewMode: 'photos',
   lightboxImage: null,
   lightboxPaths: [],
-  setLightboxImage: (lightboxImage, paths) => set(state => ({
+  setLightboxImage: (lightboxImage, paths) => set((state) => ({
     lightboxImage,
     lightboxPaths: lightboxImage ? (paths ?? state.lightboxPaths) : [],
   })),
+  lastLightboxTrigger: null,
+  setLastLightboxTrigger: (lastLightboxTrigger) => set({ lastLightboxTrigger }),
   setViewMode: (viewMode) => set({ viewMode, searchQuery: '' }),
-  
+
   stats: { photos: 0, faces: 0, people: 0 },
   setStats: (stats) => set({ stats }),
 
@@ -83,4 +94,12 @@ export const useAppStore = create<AppState>((set) => ({
 
   folderFilter: null,
   setFolderFilter: (folderFilter) => set({ folderFilter }),
+
+  imageVersions: {},
+  bumpImageVersion: (path) => set((state) => ({
+    imageVersions: {
+      ...state.imageVersions,
+      [path]: (state.imageVersions[path] ?? 0) + 1,
+    },
+  })),
 }));
