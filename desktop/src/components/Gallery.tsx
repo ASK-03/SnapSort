@@ -213,7 +213,7 @@ function SearchResults({ query, cols, zoom, onZoomChange }: {
   );
 }
 
-const defaultGalleryZoom = () => (typeof window !== 'undefined' && window.innerWidth >= 1280 ? 2 : 4);
+const defaultGalleryZoom = () => (typeof window !== 'undefined' && window.innerWidth >= 1280 ? 4 : 6);
 
 export const Gallery = ({ query }: { query?: string }) => {
   const { images, folderFilter, setFolderFilter, setIsScanning, setScanningFolder } = useAppStore();
