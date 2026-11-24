@@ -38,7 +38,7 @@ function clampPan(
 }
 
 export const Lightbox = () => {
-  const { lightboxImage, setLightboxImage, images, viewerPanel, setViewerPanel, viewerZoom, setViewerZoom, viewerPan, setViewerPan, setSelectedPerson, setViewMode } = useAppStore();
+  const { lightboxImage, setLightboxImage, lightboxPaths: images, viewerPanel, setViewerPanel, viewerZoom, setViewerZoom, viewerPan, setViewerPan, setSelectedPerson, setViewMode } = useAppStore();
   const [faces, setFaces] = useState<{ id: number; name: string | null }[]>([]);
   const [editFilter, setEditFilter] = useState('none');
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -167,7 +167,7 @@ export const Lightbox = () => {
           (not flex siblings) because the close button and icon group have
           different widths; a flex-1 middle column centers within whatever
           space is LEFT OVER between them, not the true viewport center. */}
-      <div className="absolute top-0 left-0 right-0 z-10 h-[76px] bg-gradient-to-b from-black/55 to-transparent">
+      <div className="viewer-window-toolbar window-drag absolute top-0 z-10 h-[76px] bg-gradient-to-b from-black/55 to-transparent">
         {/* Positioned to its own center-of-64px column (matching the edit
             rail's width below) rather than the bar's own padding, so it
             stays aligned with the rail's icon column when open. */}

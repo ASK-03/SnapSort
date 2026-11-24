@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  --ss-titlebar: #F5F4F1;
   --ss-bg: #FAF9F6;
   --ss-surface: #FFFFFF;
   --ss-surface-hi: #F3F1ED;
@@ -15,6 +16,7 @@
 }
 
 .dark {
+  --ss-titlebar: #202124;
   --ss-bg: #141517;
   --ss-surface: #1A1B1E;
   --ss-surface-hi: #1E2023;
@@ -32,6 +34,76 @@
   }
 }
 
+/* Electron supplies these insets for the platform's native window buttons. */
+:root {
+  --window-left: env(titlebar-area-x, 0px);
+  --window-right: max(0px, calc(100vw - var(--window-left) - env(titlebar-area-width, 100vw)));
+  --window-height: max(40px, env(titlebar-area-height, 0px));
+}
+.window-drag {
+  app-region: drag;
+  user-select: none;
+}
+.window-drag button, .window-interactive {
+  app-region: no-drag;
+}
+.window-toolbar {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, min(40%, 480px)) minmax(max-content, 1fr);
+  align-items: center;
+  flex-shrink: 0;
+  height: var(--window-height);
+  background: var(--ss-titlebar);
+  border-bottom: 1px solid var(--ss-border);
+}
+.window-leading {
+  padding-left: calc(8px + var(--window-left));
+}
+.window-brand {
+  @apply inline-flex h-7 items-center gap-2 rounded-md px-2 text-[13px] font-semibold tracking-tight text-text;
+}
+.window-search {
+  @apply flex h-7 min-w-0 items-center rounded-md border border-border bg-surface text-text-dim;
+}
+.window-search:focus-within {
+  border-color: var(--ss-accent);
+}
+.window-search svg, .window-search kbd {
+  flex-shrink: 0;
+}
+.window-search input {
+  @apply min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-text-dim;
+  user-select: text;
+}
+.window-search kbd {
+  @apply rounded border border-border px-1 font-sans text-[10px] leading-4;
+}
+.window-actions {
+  justify-self: end;
+  margin-right: calc(8px + var(--window-right));
+  padding-right: min(8px, var(--window-right));
+  border-right: min(1px, var(--window-right)) solid var(--ss-border);
+}
+.window-actions button {
+  @apply grid h-7 w-7 place-items-center rounded-md text-text-dim;
+}
+.viewer-window-toolbar {
+  left: var(--window-left);
+  right: var(--window-right);
+}
+.window-tool {
+  @apply hover:bg-border hover:text-text active:bg-surface-hi focus-visible:outline-accent;
+}
+@media (max-width: 600px) {
+  .window-toolbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 8px;
+  }
+  .window-search kbd {
+    display: none;
+  }
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
@@ -46,6 +118,21 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ss-text-mute);
+}
+
+/* The transparent part of the native scrollbar keeps the last column clear
+   and gives the slim visible thumb a generous drag target. */
+.search-results-grid [data-virtuoso-scroller] {
+  scrollbar-gutter: stable;
+}
+.search-results-grid [data-virtuoso-scroller]::-webkit-scrollbar:vertical {
+  width: 36px;
+}
+.search-results-grid [data-virtuoso-scroller]::-webkit-scrollbar-thumb:vertical {
+  border-left: 27px solid transparent;
+  border-right: 4px solid transparent;
+  border-radius: 30px 7px 7px 30px / 3px;
+  background-clip: padding-box;
 }
 
 /* Apple-style cinematic timing for every view transition (Viewer open/close,

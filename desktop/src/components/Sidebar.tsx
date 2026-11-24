@@ -24,12 +24,11 @@ const basename = (path: string) => {
 export const Sidebar = () => {
   const {
     viewMode, setViewMode, isScanning, setIsScanning, progress, stats,
-    images, folderFilter, setFolderFilter, setSearchQuery, setSelectedPerson,
+    images, folderFilter, setFolderFilter, searchQuery, setSelectedPerson,
   } = useAppStore();
 
   const handleSelectFolder = async () => {
-    // @ts-ignore
-    const folderPath = await window.electronAPI.openDirectory();
+    const folderPath = await window.electronAPI?.openDirectory();
     if (folderPath) {
       setIsScanning(true);
       await scanFolder(folderPath);
@@ -46,8 +45,7 @@ export const Sidebar = () => {
   }, [images]);
 
   const openFolder = (dir: string) => {
-    setSearchQuery('');
-    setFolderFilter(folderFilter === dir ? null : dir);
+    setFolderFilter(!searchQuery.trim() && folderFilter === dir ? null : dir);
     setViewMode('photos');
   };
 
@@ -66,13 +64,7 @@ export const Sidebar = () => {
 
   return (
     <aside className="w-64 bg-surface border-r border-border flex flex-col h-full text-sm">
-      {/* Logo */}
-      <div className="p-6 flex items-center gap-3">
-        <img src="./snapsort-logo.png" alt="SnapSort Logo" className="w-8 h-8 rounded-lg" />
-        <h1 className="text-xl font-semibold text-text">SnapSort</h1>
-      </div>
-
-      <div className="px-4 mb-6">
+      <div className="px-4 pt-4 mb-6">
         <button
           onClick={handleSelectFolder}
           className="w-full flex items-center justify-center gap-2 bg-accent hover:brightness-110 text-bg py-2.5 rounded-lg transition-all duration-150 font-medium"
@@ -84,7 +76,7 @@ export const Sidebar = () => {
       {/* Main Nav — fixed, never scrolls */}
       <div className="px-3 space-y-1 flex-shrink-0">
         {navItems.map((item) => {
-          const isActive = viewMode === item.id && !folderFilter;
+          const isActive = !searchQuery.trim() && viewMode === item.id && !folderFilter;
           return (
             <button
               key={item.id}
@@ -116,7 +108,7 @@ export const Sidebar = () => {
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-3 space-y-0.5">
             {folders.map(([dir, count]) => {
-              const isActive = folderFilter === dir;
+              const isActive = !searchQuery.trim() && folderFilter === dir;
               return (
                 <button
                   key={dir}
@@ -140,7 +132,7 @@ export const Sidebar = () => {
       <div className="px-3 flex-shrink-0">
         <div className="my-3 border-t border-border mx-3"></div>
         {bottomNavItems.map((item) => {
-          const isActive = viewMode === item.id;
+          const isActive = !searchQuery.trim() && viewMode === item.id;
           return (
             <button
               key={item.id}

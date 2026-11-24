@@ -1,51 +1,96 @@
+import { ChevronDown, Moon, Search, Sun, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store';
-import { Search, Sun, Moon } from 'lucide-react';
-
-import { useEffect, useRef } from 'react';
+import { api } from '../api';
 
 export const TopBar = () => {
   const { searchQuery, setSearchQuery, theme, setTheme } = useAppStore();
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-  const shortcutText = isMac ? '⌘K' : 'Ctrl+K';
+  const [focused, setFocused] = useState(false);
+  const [exampleName, setExampleName] = useState('');
+  const viewerOpen = useAppStore(state => Boolean(state.lightboxImage));
+  const windowTheme = viewerOpen ? 'viewer' : theme;
+  const isMac = navigator.platform.toUpperCase().includes('MAC');
+  const hasAppMenu = !isMac && Boolean(window.electronAPI);
+  const themeAction = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
+    window.electronAPI?.setWindowTheme(windowTheme);
+  }, [windowTheme]);
+
+  const showExample = focused && !searchQuery && !viewerOpen;
+  useEffect(() => {
+    if (!showExample) return;
+    const controller = new AbortController();
+    api.get<{ faces: { name: string | null }[] }>('/faces', { signal: controller.signal })
+      .then(({ data }) => {
+        if (!controller.signal.aborted) setExampleName(data.faces.find(face => face.name?.trim())?.name?.trim() ?? '');
+      })
+      .catch(() => { if (!controller.signal.aborted) setExampleName(''); });
+    return () => controller.abort();
+  }, [showExample]);
+
+  useEffect(() => {
+    if (viewerOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
         inputRef.current?.focus();
+        inputRef.current?.select();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [viewerOpen]);
+
+  const wordmark = <>
+    <img src="./snapsort-logo.png" alt="" draggable={false} width={20} height={20} />
+    <span>SnapSort</span>
+  </>;
 
   return (
-    <header className="h-20 border-b border-border flex items-center justify-between px-8 bg-bg">
-      <div className="flex-1 max-w-2xl flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-mute" size={16} />
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Search your photos — people, places, things…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-surface-hi border border-border rounded-xl py-2.5 pl-11 pr-14 text-sm text-text focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-mute"
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-bg text-text-mute text-[10px] px-2 py-1 rounded font-medium border border-border">
-            {shortcutText}
-          </div>
-        </div>
+    <header className="window-toolbar window-drag" inert={viewerOpen}>
+      <div className="window-leading">
+        {hasAppMenu ? (
+          <button className="window-brand window-tool" title="Application menu" aria-label="SnapSort application menu" aria-haspopup="menu"
+            onClick={event => {
+              const { left, bottom } = event.currentTarget.getBoundingClientRect();
+              window.electronAPI?.showApplicationMenu(left, bottom);
+            }}>
+            {wordmark}
+            <ChevronDown size={12} className="text-text-dim" />
+          </button>
+        ) : <div className="window-brand">{wordmark}</div>}
       </div>
 
-      <button
-        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        className="ml-4 p-3 rounded-xl border border-border text-text-dim hover:bg-surface-hi transition-colors duration-150"
-      >
-        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
+      <div role="search" className="window-search window-interactive relative">
+        <label className="flex h-full min-w-0 flex-1 cursor-text items-center gap-2 px-2.5">
+          <Search size={14} aria-hidden="true" />
+          <input ref={inputRef} type="text" name="library-search" autoComplete="off" aria-label="Search your photos"
+            placeholder={showExample ? `Try “${exampleName ? exampleName + ' at the beach' : 'a dog on the beach'}”` : 'Search your library'}
+            onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+            onKeyDown={event => {
+              if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                setSearchQuery('');
+              }
+            }}
+            value={searchQuery} onChange={event => setSearchQuery(event.target.value)} />
+          {!searchQuery && <kbd aria-hidden="true">{isMac ? '⌘K' : 'Ctrl K'}</kbd>}
+        </label>
+        {searchQuery && <button type="button" className="window-tool mr-0.5 grid h-6 w-6 shrink-0 place-items-center rounded"
+          aria-label="Clear search" title="Clear search" onClick={() => {
+            setSearchQuery('');
+            inputRef.current?.focus();
+          }}><X size={14} /></button>}
+      </div>
+
+      <div className="window-actions">
+        <button className="window-tool" aria-label={themeAction} title={themeAction}
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+      </div>
     </header>
   );
 };

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from './store';
-import { getImages, getProgress, getSearch, getStats, initApi } from './api';
+import { getImages, getProgress, getStats, initApi } from './api';
 
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -13,8 +13,24 @@ import { Settings } from './components/Settings';
 import { About } from './components/About';
 
 function App() {
-  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, setStats, viewMode, setViewMode, theme, selectedPerson } = useAppStore();
+  const { isScanning, setIsScanning, setProgress, setImages, searchQuery, setStats, viewMode, theme, selectedPerson } = useAppStore();
+  const query = searchQuery.trim();
   const [isReady, setIsReady] = useState(false);
+
+  const loadImages = useCallback(async () => {
+    try {
+      const stats = await getStats();
+      setStats(stats);
+
+      const data = await getImages(0, 1000);
+      const current = useAppStore.getState().images;
+      if (data.length !== current.length || data.some((path: string, index: number) => path !== current[index])) {
+        setImages(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [setImages, setStats]);
 
   useEffect(() => {
     initApi().then(() => {
@@ -41,54 +57,13 @@ function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isScanning, isReady]);
+  }, [isScanning, isReady, loadImages, setIsScanning, setProgress]);
 
   useEffect(() => {
     if (!isReady) return;
     // Initial load
     loadImages();
-  }, [isReady]);
-
-  useEffect(() => {
-    const handleSearch = async () => {
-      if (!searchQuery.trim()) {
-        loadImages();
-        return;
-      }
-      try {
-        const results = await getSearch(searchQuery);
-        setImages(results.map((r: any) => r.path));
-        setViewMode('photos');
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    // Add debounce here in a real app, for now just call on change
-    const timeout = setTimeout(handleSearch, 300);
-    return () => clearTimeout(timeout);
-  }, [searchQuery]);
-
-  const loadImages = async () => {
-    try {
-      const stats = await getStats();
-      setStats(stats);
-
-      const state = useAppStore.getState();
-      if (!state.searchQuery.trim()) {
-        const data = await getImages(0, 1000);
-        const current = useAppStore.getState().images;
-        // Skip the update (and the resulting full-grid re-render) when nothing
-        // actually changed — loadImages() is polled every second while scanning.
-        const unchanged = current.length === data.length && current[current.length - 1] === data[data.length - 1];
-        if (!unchanged) {
-          setImages(data);
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  }, [isReady, loadImages]);
 
   if (!isReady) {
     return (
@@ -102,20 +77,21 @@ function App() {
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
-      <div className="flex h-screen bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
-        <Sidebar />
-        
-        <main className="flex-1 flex flex-col min-w-0">
-          <TopBar />
-          
-          <div className="flex-1 flex overflow-hidden">
-            {viewMode === 'photos' && <Gallery />}
-            {viewMode === 'people' && selectedPerson && <PersonView />}
-            {(viewMode === 'faces' || (viewMode === 'people' && !selectedPerson)) && <Faces />}
-            {viewMode === 'settings' && <Settings />}
-            {viewMode === 'about' && <About />}
-          </div>
-        </main>
+      <div className="flex h-screen flex-col bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
+        <TopBar />
+        <div className="flex flex-1 min-h-0">
+          <Sidebar />
+          <main className="relative flex min-w-0 flex-1 overflow-hidden">
+            <div className={`flex flex-1 min-w-0 ${query ? 'invisible' : ''}`} inert={Boolean(query)}>
+              {viewMode === 'photos' && <Gallery />}
+              {viewMode === 'people' && selectedPerson && <PersonView />}
+              {(viewMode === 'faces' || (viewMode === 'people' && !selectedPerson)) && <Faces />}
+              {viewMode === 'settings' && <Settings />}
+              {viewMode === 'about' && <About />}
+            </div>
+            {query && <div className="absolute inset-0 flex"><Gallery query={query} /></div>}
+          </main>
+        </div>
         
         <Lightbox />
         <ContextMenu />
