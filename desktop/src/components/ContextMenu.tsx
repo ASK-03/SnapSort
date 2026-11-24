@@ -28,7 +28,7 @@ export const ContextMenu = () => {
   if (!contextMenu) return null;
 
   const items = [
-    { label: 'Open', icon: FolderOpen, enabled: true, onClick: () => withViewTransition(() => setLightboxImage(contextMenu.imagePath)) },
+    { label: 'Open', icon: FolderOpen, enabled: true, onClick: () => withViewTransition(() => setLightboxImage(contextMenu.imagePath, contextMenu.paths)) },
     { label: 'Reprocess faces', icon: UserCircle, enabled: false },
     { label: 'Rename', icon: Pencil, enabled: false },
     { label: 'Add to favorites', icon: Heart, enabled: false },

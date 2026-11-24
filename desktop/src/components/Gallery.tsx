@@ -1,9 +1,9 @@
 import { useAppStore } from '../store';
-import { getPreviewUrl } from '../api';
-import { X, Grid2X2, Folder } from 'lucide-react';
+import { getPreviewUrl, getSearch } from '../api';
+import { X, Grid2X2, Folder, Search } from 'lucide-react';
 import { withViewTransition } from '../lib/viewTransition';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { VirtuosoGrid } from 'react-virtuoso';
 
 // Shown when a tile's source file is gone (drive unmounted, file moved).
@@ -44,10 +44,10 @@ export const PhotoGrid = ({ paths, cols }: { paths: string[]; cols: number }) =>
         return (
           <div
             className="rounded-2xl overflow-hidden cursor-pointer relative group border-2 border-transparent hover:border-accent/50 transition-colors duration-150 bg-surface-hi aspect-square"
-            onClick={() => withViewTransition(() => setLightboxImage(path))}
+            onClick={() => withViewTransition(() => setLightboxImage(path, paths))}
             onContextMenu={(e) => {
               e.preventDefault();
-              setContextMenu({ x: e.clientX, y: e.clientY, imagePath: path });
+              setContextMenu({ x: e.clientX, y: e.clientY, imagePath: path, paths });
             }}
           >
             <img
@@ -69,11 +69,71 @@ export const PhotoGrid = ({ paths, cols }: { paths: string[]; cols: number }) =>
   );
 };
 
-export const Gallery = () => {
-  const {
-    images, searchQuery, setSearchQuery,
-    folderFilter, setFolderFilter,
-  } = useAppStore();
+type SearchState =
+  | { status: 'waiting' | 'loading' | 'error' }
+  | { status: 'ready'; paths: string[] };
+
+// Mounted per query so an earlier request can never render into a newer search.
+function SearchResults({ query, cols }: { query: string; cols: number }) {
+  const [result, setResult] = useState<SearchState>({ status: 'waiting' });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setResult({ status: 'loading' });
+      try {
+        const matches = await getSearch(query, controller.signal);
+        if (!controller.signal.aborted) {
+          setResult({ status: 'ready', paths: matches.map(match => match.path) });
+        }
+      } catch {
+        if (!controller.signal.aborted) setResult({ status: 'error' });
+      }
+    }, attempt ? 0 : 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, attempt]);
+
+  let summary = '';
+  if (result.status === 'loading') summary = 'Searching…';
+  if (result.status === 'error') summary = 'Search couldn’t finish';
+  if (result.status === 'ready') {
+    const count = result.paths.length;
+    // The local search endpoint returns its top 20 ranked photos.
+    if (!count) summary = 'No matching photos';
+    else if (count === 20) summary = 'Top 20 matches';
+    else summary = count === 1 ? '1 match' : `${count} matches`;
+  }
+
+  return (
+    <>
+      <header className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1 px-8 pt-6 pb-4">
+        <h2 className="text-[22px] leading-7 font-semibold tracking-tight text-text">Search results</h2>
+        <span role="status" aria-live="polite" aria-atomic="true" className="text-[13px] leading-5 text-text-dim tabular-nums">
+          {summary}
+        </span>
+      </header>
+      <div className="photo-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
+        {result.status === 'ready' && result.paths.length > 0 && <PhotoGrid paths={result.paths} cols={cols} />}
+        {(result.status === 'error' || (result.status === 'ready' && !result.paths.length)) && (
+          <div className="h-full pr-7 flex flex-col items-center justify-center gap-3 text-text-dim">
+            <Search size={24} aria-hidden="true" />
+            {result.status === 'error' ? (
+              <button className="rounded-lg border border-border bg-surface px-4 py-2 text-sm text-text hover:bg-surface-hi"
+                onClick={() => { setResult({ status: 'loading' }); setAttempt(value => value + 1); }}>Retry</button>
+            ) : <p className="text-sm">Try another description or a person you’ve named.</p>}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export const Gallery = ({ query }: { query?: string }) => {
+  const { images, folderFilter, setFolderFilter } = useAppStore();
   const [zoom, setZoom] = useState(6);
 
   const getColCount = () => {
@@ -91,58 +151,38 @@ export const Gallery = () => {
     [images, folderFilter]
   );
 
-  const hasSearch = searchQuery.trim().length > 0;
   const numCols = getColCount();
-
-  const clearFilters = () => {
-    setSearchQuery('');
-  };
 
   return (
     <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
-
-      {/* Gallery Header / Search Breadcrumbs */}
-      <div className="px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3 flex-wrap">
-          {folderFilter && (
-            <div className="flex items-center gap-2 bg-surface-hi text-text-dim px-3 py-1.5 rounded-full text-sm border border-border">
-              <Folder size={13} />
-              <span>{basename(folderFilter)}</span>
-              <button onClick={() => setFolderFilter(null)} className="hover:text-text">
-                <X size={14} />
-              </button>
-            </div>
-          )}
-          {hasSearch ? (
-            <div className="flex items-center gap-2 bg-accent/10 text-accent px-3 py-1.5 rounded-full text-sm border border-accent/20">
-              <span>"{searchQuery}"</span>
-              <button onClick={clearFilters} className="hover:brightness-125">
-                <X size={14} />
-              </button>
-            </div>
-          ) : !folderFilter && (
-            <span className="text-sm text-text-mute">{displayImages.length.toLocaleString()} results</span>
-          )}
-        </div>
-      </div>
-
-      {/* Grid — VirtuosoGrid only mounts DOM nodes for cells near the viewport,
-          so scroll performance stays flat regardless of library size. */}
-      <div className="flex-1 px-8 pb-4 overflow-hidden">
-        {displayImages.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-text-mute flex-col gap-4">
-            <Grid2X2 size={48} className="opacity-20" />
-            <p>No images to display</p>
+      {query ? <SearchResults key={query} query={query} cols={numCols} /> : (
+        <>
+          <div className="px-8 py-4 flex items-center">
+            {folderFilter ? (
+              <div className="flex items-center gap-2 bg-surface-hi text-text-dim px-3 py-1.5 rounded-full text-sm border border-border">
+                <Folder size={13} />
+                <span>{basename(folderFilter)}</span>
+                <button aria-label="Clear folder filter" onClick={() => setFolderFilter(null)} className="hover:text-text">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : <span className="text-sm text-text-mute">{displayImages.length.toLocaleString()} results</span>}
           </div>
-        ) : (
-          <PhotoGrid paths={displayImages} cols={numCols} />
-        )}
-      </div>
+          <div className="photo-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
+            {displayImages.length ? <PhotoGrid paths={displayImages} cols={numCols} /> : (
+              <div className="h-full flex items-center justify-center text-text-mute flex-col gap-4">
+                <Grid2X2 size={48} className="opacity-20" />
+                <p>No images to display</p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Bottom status & zoom bar */}
       <div className="px-8 py-3 border-t border-border flex items-center justify-between text-xs text-text-mute bg-bg">
-        <div>{displayImages.length.toLocaleString()} results</div>
-        <div className="flex items-center gap-4">
+        {!query && <div>{displayImages.length.toLocaleString()} results</div>}
+        <div className="ml-auto flex items-center gap-4">
           <Grid2X2 size={14} className="text-text-mute" />
           <input
             type="range"

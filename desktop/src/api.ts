@@ -6,9 +6,7 @@ export const api = axios.create({
 });
 
 export const initApi = async () => {
-  // @ts-ignore
-  if (window.electronAPI && window.electronAPI.getBackendPort) {
-    // @ts-ignore
+  if (window.electronAPI) {
     const port = await window.electronAPI.getBackendPort();
     BASE_URL = `http://127.0.0.1:${port}`;
     api.defaults.baseURL = `${BASE_URL}/api`;
@@ -30,8 +28,8 @@ export const getImages = async (offset = 0, limit = 50) => {
   return data.images;
 };
 
-export const getSearch = async (query: string) => {
-  const { data } = await api.get('/search', { params: { q: query } });
+export const getSearch = async (query: string, signal: AbortSignal) => {
+  const { data } = await api.get<{ path: string; score: number }[]>('/search', { params: { q: query }, signal });
   return data;
 };
 

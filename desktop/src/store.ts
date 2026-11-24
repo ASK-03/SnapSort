@@ -17,7 +17,8 @@ interface AppState {
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   lightboxImage: string | null;
-  setLightboxImage: (image: string | null) => void;
+  lightboxPaths: string[];
+  setLightboxImage: (image: string | null, paths?: string[]) => void;
   
   stats: { photos: number; faces: number; people: number };
   setStats: (stats: { photos: number; faces: number; people: number }) => void;
@@ -25,8 +26,8 @@ interface AppState {
   viewerPanel: 'none' | 'info' | 'edit';
   setViewerPanel: (panel: 'none' | 'info' | 'edit') => void;
 
-  contextMenu: { x: number; y: number; imagePath: string } | null;
-  setContextMenu: (menu: { x: number; y: number; imagePath: string } | null) => void;
+  contextMenu: { x: number; y: number; imagePath: string; paths: string[] } | null;
+  setContextMenu: (menu: { x: number; y: number; imagePath: string; paths: string[] } | null) => void;
 
   selectedPerson: { id: number; name: string } | null;
   setSelectedPerson: (person: { id: number; name: string } | null) => void;
@@ -55,8 +56,12 @@ export const useAppStore = create<AppState>((set) => ({
   
   viewMode: 'photos',
   lightboxImage: null,
-  setLightboxImage: (lightboxImage) => set({ lightboxImage }),
-  setViewMode: (viewMode) => set({ viewMode }),
+  lightboxPaths: [],
+  setLightboxImage: (lightboxImage, paths) => set(state => ({
+    lightboxImage,
+    lightboxPaths: lightboxImage ? (paths ?? state.lightboxPaths) : [],
+  })),
+  setViewMode: (viewMode) => set({ viewMode, searchQuery: '' }),
   
   stats: { photos: 0, faces: 0, people: 0 },
   setStats: (stats) => set({ stats }),

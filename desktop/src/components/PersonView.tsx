@@ -87,7 +87,7 @@ export const PersonView = () => {
           <p className="text-sm text-text-mute mt-1">{paths.length.toLocaleString()} photos</p>
         </div>
       </div>
-      <div className="flex-1 px-8 pb-4 overflow-hidden">
+      <div className="photo-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
         <PhotoGrid paths={paths} cols={5} />
       </div>
     </div>
