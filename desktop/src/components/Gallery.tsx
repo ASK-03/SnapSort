@@ -213,9 +213,27 @@ function SearchResults({ query, cols, zoom, onZoomChange }: {
   );
 }
 
+const defaultGalleryZoom = () => (typeof window !== 'undefined' && window.innerWidth >= 1280 ? 2 : 4);
+
 export const Gallery = ({ query }: { query?: string }) => {
   const { images, folderFilter, setFolderFilter, setIsScanning, setScanningFolder } = useAppStore();
-  const [zoom, setZoom] = useState(6);
+  const [zoom, setZoom] = useState<number>(defaultGalleryZoom);
+  const manualZoomRef = useRef(false);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (!manualZoomRef.current) {
+        setZoom(defaultGalleryZoom());
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const handleZoomChange = (val: number) => {
+    manualZoomRef.current = true;
+    setZoom(val);
+  };
 
   const numCols = zoom === 8 ? 3 : zoom === 6 ? 4 : zoom === 4 ? 6 : 8;
 
@@ -236,7 +254,7 @@ export const Gallery = ({ query }: { query?: string }) => {
   return (
     <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
       {query ? (
-        <SearchResults key={query} query={query} cols={numCols} zoom={zoom} onZoomChange={setZoom} />
+        <SearchResults key={query} query={query} cols={numCols} zoom={zoom} onZoomChange={handleZoomChange} />
       ) : (
         <>
           <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-3.5">
@@ -260,7 +278,7 @@ export const Gallery = ({ query }: { query?: string }) => {
                 </button>
               )}
             </div>
-            {displayImages.length > 0 && <DensityControl zoom={zoom} onChange={setZoom} />}
+            {displayImages.length > 0 && <DensityControl zoom={zoom} onChange={handleZoomChange} />}
           </header>
 
           <div className="flex-1 min-h-0 px-6 pb-2 overflow-hidden">
