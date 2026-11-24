@@ -17,6 +17,7 @@ import secrets
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import uuid
@@ -169,9 +170,11 @@ class SnapSortMCPBridge:
                 )
             info = read_runtime_info(self.data_dir)
             if info and self._probe_runtime(info):
+                threading.Thread(target=proc.wait, daemon=True).start()
                 return info
             time.sleep(0.2)
 
+        threading.Thread(target=proc.wait, daemon=True).start()
         raise BackendConnectionError("Timed out waiting for headless SnapSort backend readiness.")
 
     def _ensure_backend(self) -> dict[str, Any]:
