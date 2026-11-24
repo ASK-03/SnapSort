@@ -804,34 +804,127 @@ async def merge_faces(req: MergeRequest):
 async def search_images(
     q: str,
     person_id: int | None = None,
+    person_name: str | None = None,
     folder: str | None = None,
     limit: int = 20,
+    min_score: float | None = None,
     include_meta: bool = False,
 ):
     """Semantic text, person-filtered, and folder-filtered search."""
     ctrl = controller()
     clamped_limit = max(1, min(100, limit))
+    policy = load_policy(app.state.data_dir)
+    stats = ctrl.db.get_stats()
     resolved_person_id = None
+    person_photo_count: int | None = None
+
     if person_id is not None:
         resolved_person_id, _ = ctrl.db.resolve_face_id(person_id)
         if not ctrl.db.face_exists(resolved_person_id):
             raise HTTPException(status_code=404, detail=f"Unknown face cluster ID: {person_id}")
+        person_photo_count = len(ctrl.db.get_image_ids_for_face(resolved_person_id))
+    elif person_name and person_name.strip():
+        matches = ctrl.db.get_all_faces_with_counts(name_filter=person_name.strip(), limit=20)
+        if not matches:
+            if not include_meta:
+                return []
+            return {
+                "results": [],
+                "status": "person_not_found",
+                "message": (
+                    f"No indexed person matches '{person_name.strip()}'. "
+                    "Ask the user to name them in SnapSort's People view."
+                ),
+                "resolved_person_id": None,
+                "person_photo_count": 0,
+                "total_indexed_photos": stats["photos"],
+                "clip_indexed_photos": stats["clip_indexed_photos"],
+                "indexing_in_progress": ctrl.is_scanning,
+                "active_scan_id": ctrl.active_job_id,
+                "allow_previews": policy["allow_previews"],
+            }
+        if len(matches) > 1:
+            if not include_meta:
+                return []
+            return {
+                "results": [],
+                "status": "disambiguation_required",
+                "matching_people": matches,
+                "message": (
+                    f"Multiple face clusters match '{person_name.strip()}'. "
+                    "Ask the user which person_id to search."
+                ),
+                "resolved_person_id": None,
+                "person_photo_count": None,
+                "total_indexed_photos": stats["photos"],
+                "clip_indexed_photos": stats["clip_indexed_photos"],
+                "indexing_in_progress": ctrl.is_scanning,
+                "active_scan_id": ctrl.active_job_id,
+                "allow_previews": policy["allow_previews"],
+            }
+        resolved_person_id = matches[0]["id"]
+        person_photo_count = matches[0]["count"]
 
-    results = await asyncio.to_thread(
-        ctrl.search,
+    if min_score is not None:
+        effective_min = max(0.0, min(1.0, float(min_score)))
+    elif include_meta:
+        effective_min = 0.20 if resolved_person_id is not None else 0.22
+    else:
+        effective_min = 0.25
+
+    results, highest_below = await asyncio.to_thread(
+        ctrl.search_with_diagnostics,
         q,
         top_k=clamped_limit,
         person_id=resolved_person_id,
         folder=folder,
+        min_score=effective_min,
     )
     items = [{"path": path, "score": float(score)} for path, score in results]
     if not include_meta:
         return items
+
+    status = "ok"
+    hint: str | None = None
+    if not items:
+        if stats["photos"] == 0 or stats["clip_indexed_photos"] == 0:
+            status = "empty_library"
+            hint = (
+                "No CLIP-indexed photos are available yet. Call list_approved_folders to check "
+                "folder status or ask the user to scan a folder in SnapSort."
+            )
+        elif folder and ctrl.db.count_images_in_folder(folder) == 0:
+            status = "folder_empty"
+            hint = (
+                f"No indexed photos found in '{folder}'. Stop searching this folder and tell "
+                "the user to add or scan photos in an approved folder."
+            )
+        else:
+            status = "no_matches"
+            if resolved_person_id is not None:
+                hint = (
+                    "No scene matches met the threshold for that person. Do NOT keep retrying "
+                    "rephrased queries—you may call get_person_images(person_id) or report this to the user."
+                )
+            else:
+                hint = (
+                    "No images met the similarity threshold. Make at most one broader search "
+                    "(for example with min_score=0.18); do not loop over synonym variations."
+                )
+
     return {
         "results": items,
+        "status": status,
+        "hint": hint,
+        "resolved_person_id": resolved_person_id,
+        "person_photo_count": person_photo_count,
+        "total_indexed_photos": stats["photos"],
+        "clip_indexed_photos": stats["clip_indexed_photos"],
         "indexing_in_progress": ctrl.is_scanning,
         "active_scan_id": ctrl.active_job_id,
-        "resolved_person_id": resolved_person_id,
+        "allow_previews": policy["allow_previews"],
+        "min_score_used": effective_min,
+        "highest_below_threshold": highest_below,
     }
 
 
@@ -911,20 +1004,76 @@ def _require_mcp_policy() -> dict:
     return policy
 
 
+def _folder_has_supported_files(folder: str) -> bool:
+    """Return True as soon as one supported image file is found under folder."""
+    from controller import Controller
+
+    if not os.path.isdir(folder):
+        return False
+    for _, _, files in os.walk(folder):
+        for fn in files:
+            if fn.lower().endswith(Controller.SUPPORTED_EXTENSIONS):
+                return True
+    return False
+
+
 @app.get("/api/mcp/folders")
 async def mcp_list_approved_folders():
     policy = _require_mcp_policy()
     ctrl = controller()
     folders = []
     for root in policy["approved_roots"]:
+        exists = os.path.isdir(root)
+        indexed = ctrl.db.count_images_in_folder(root)
+        has_files = indexed > 0 or (exists and await asyncio.to_thread(_folder_has_supported_files, root))
+        if not exists:
+            folder_status = "folder_unavailable"
+        elif not has_files and indexed == 0:
+            folder_status = "empty_folder"
+        elif indexed == 0 and has_files:
+            folder_status = "needs_scan" if policy["allow_agent_scan"] else "needs_user_scan"
+        else:
+            folder_status = "ready"
         folders.append(
             {
                 "path": root,
-                "exists": os.path.isdir(root),
-                "indexed_images": ctrl.db.count_images_in_folder(root),
+                "exists": exists,
+                "indexed_images": indexed,
+                "has_supported_files": has_files,
+                "status": folder_status,
             }
         )
+
+    if not folders:
+        top_status = "no_approved_folders"
+        action_required = (
+            "No approved folders are configured in SnapSort. Stop and tell the user to open "
+            "SnapSort -> Settings -> MCP & AI Agent Access -> Approved Folders and click 'Add Folder'."
+        )
+    elif all(f["status"] in ("empty_folder", "folder_unavailable") for f in folders):
+        top_status = "no_images_in_approved_folders"
+        action_required = (
+            "The approved folder(s) contain no supported photos (or are unavailable). "
+            "Stop retrying and tell the user to add photos or approve a folder with photos in SnapSort Settings -> Approved Folders."
+        )
+    elif all(f["indexed_images"] == 0 for f in folders) and any(f["status"] == "needs_user_scan" for f in folders):
+        top_status = "needs_user_scan"
+        action_required = (
+            "Approved folders contain unindexed photos, but Agent Folder Scanning is disabled. "
+            "Tell the user to scan the folder in SnapSort or enable 'Allow Agent Folder Scanning' in Settings."
+        )
+    elif all(f["indexed_images"] == 0 for f in folders) and any(f["status"] == "needs_scan" for f in folders):
+        top_status = "needs_scan"
+        action_required = (
+            "Approved folders contain unindexed photos. Call scan_folder on an approved root to index them."
+        )
+    else:
+        top_status = "ok"
+        action_required = None
+
     return {
+        "status": top_status,
+        "action_required": action_required,
         "folders": folders,
         "allow_agent_scan": policy["allow_agent_scan"],
         "allow_previews": policy["allow_previews"],
@@ -938,13 +1087,40 @@ async def mcp_list_folder_images(folder: str, limit: int = 20, offset: int = 0):
     policy = _require_mcp_policy()
     if not is_path_within_approved_roots(folder, policy["approved_roots"]):
         raise HTTPException(status_code=403, detail="Folder is not within user-approved library roots")
+    real_folder = os.path.realpath(folder)
     clamped_limit = max(1, min(100, limit))
     images = controller().db.get_images_in_folder_paginated(
-        os.path.realpath(folder),
+        real_folder,
         limit=clamped_limit,
         offset=max(0, offset),
     )
-    return {"images": images, "folder": os.path.realpath(folder)}
+    status = "ok"
+    action_required: str | None = None
+    if not images:
+        if not os.path.isdir(real_folder):
+            status = "folder_unavailable"
+            action_required = f"Folder '{real_folder}' is unavailable on disk. Tell the user to check the folder or drive."
+        elif not await asyncio.to_thread(_folder_has_supported_files, real_folder):
+            status = "empty_folder"
+            action_required = (
+                f"Approved folder '{real_folder}' contains no supported photos. "
+                "Stop and tell the user to add photos or approve a different folder in SnapSort Settings."
+            )
+        elif policy["allow_agent_scan"]:
+            status = "needs_scan"
+            action_required = f"Folder '{real_folder}' has unindexed photos. Call scan_folder to index them."
+        else:
+            status = "needs_user_scan"
+            action_required = (
+                f"Folder '{real_folder}' has unindexed photos, and Agent Folder Scanning is disabled. "
+                "Tell the user to scan the folder in SnapSort or enable 'Allow Agent Folder Scanning' in Settings."
+            )
+    return {
+        "images": images,
+        "folder": real_folder,
+        "status": status,
+        "action_required": action_required,
+    }
 
 
 @app.post("/api/mcp/scan")

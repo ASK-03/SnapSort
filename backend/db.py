@@ -415,6 +415,20 @@ class Database:
             c.execute("SELECT path, COALESCE(modified, 0.0) FROM images")
             return {r[0]: float(r[1]) for r in c.fetchall()}
 
+    def get_processed_images_meta(self) -> dict[str, tuple[int, float]]:
+        """Return {path: (image_id, modified_mtime)} for all indexed images."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT id, path, COALESCE(modified, 0.0) FROM images")
+            return {r[1]: (int(r[0]), float(r[2])) for r in c.fetchall()}
+
+    def get_clip_indexed_image_ids(self) -> set[int]:
+        """Return all image_ids marked as indexed in clip_status."""
+        with self.lock:
+            c = self.conn.cursor()
+            c.execute("SELECT image_id FROM clip_status WHERE indexed = 1")
+            return {int(r[0]) for r in c.fetchall()}
+
     def get_all_images_paginated(self, offset: int = 0, limit: int = 50) -> list[str]:
         """Return a paginated list of image paths from the database, ordered by ID."""
         query = "SELECT path FROM images ORDER BY id LIMIT ? OFFSET ?"
@@ -431,10 +445,12 @@ class Database:
             total_people = c.execute(
                 "SELECT COUNT(DISTINCT name) FROM faces WHERE name IS NOT NULL AND name != ''"
             ).fetchone()[0]
+            clip_indexed = c.execute("SELECT COUNT(*) FROM clip_status WHERE indexed = 1").fetchone()[0]
             return {
                 "photos": total_images,
                 "faces": total_faces,
                 "people": total_people,
+                "clip_indexed_photos": clip_indexed,
             }
 
     def get_face_thumbnail(self, face_id: int):

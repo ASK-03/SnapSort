@@ -179,20 +179,25 @@ class Controller:
                         continue
                     all_image_paths.append(full_path)
 
-            processed_mtimes = self.db.get_processed_images_with_mtime()
+            processed_meta = self.db.get_processed_images_meta()
+            clip_indexed_ids = self.db.get_clip_indexed_image_ids()
             to_process: list[str] = []
             modified_paths: set[str] = set()
             for path in all_image_paths:
-                if path not in processed_mtimes:
+                if path not in processed_meta:
                     to_process.append(path)
                 else:
+                    img_id, old_mtime = processed_meta[path]
                     try:
                         cur_mtime = os.path.getmtime(path)
                     except OSError:
                         continue
-                    if abs(cur_mtime - processed_mtimes[path]) > 1e-6:
+                    if abs(cur_mtime - old_mtime) > 1e-6:
                         to_process.append(path)
                         modified_paths.add(path)
+                    elif img_id not in clip_indexed_ids:
+                        # Backfill missing CLIP embeddings without clearing existing face tags
+                        to_process.append(path)
         except Exception as exc:
             with self.scan_lock:
                 job = self.jobs[scan_id]
@@ -439,23 +444,41 @@ class Controller:
         self.db.set_face_name(face_id, cleaned or None)
         logger.info("Renamed face %d -> %r", face_id, cleaned or None)
 
+    def search_with_diagnostics(
+        self,
+        query: str,
+        top_k: int = 20,
+        person_id: int | None = None,
+        folder: str | None = None,
+        min_score: float | None = None,
+    ) -> tuple[list[tuple[str, float]], float | None]:
+        if not query or not query.strip():
+            return [], None
+        effective_min = 0.25 if min_score is None else float(min_score)
+        return self.search_engine.search_with_diagnostics(
+            query,
+            top_k=top_k,
+            min_score=effective_min,
+            person_id=person_id,
+            folder=folder,
+        )
+
     def search(
         self,
         query: str,
         top_k: int = 20,
         person_id: int | None = None,
         folder: str | None = None,
-        min_score: float = 0.25,
+        min_score: float | None = None,
     ):
-        if not query or not query.strip():
-            return []
-        return self.search_engine.search(
+        results, _ = self.search_with_diagnostics(
             query,
             top_k=top_k,
-            min_score=min_score,
             person_id=person_id,
             folder=folder,
+            min_score=min_score,
         )
+        return results
 
     def shutdown(self) -> None:
         """Persist FAISS indexes, close worker pool, and close DB."""
