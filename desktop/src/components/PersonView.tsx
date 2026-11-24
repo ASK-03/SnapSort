@@ -6,12 +6,10 @@ import { api, getFaceThumbnailUrl, getImagesForFace } from '../api';
 import { withViewTransition } from '../lib/viewTransition';
 import { PhotoGrid } from './Gallery';
 
-// Header avatar carries this view-transition-name; the clicked People card
-// gets the same one just before the transition (see Faces.tsx).
 export const PERSON_AVATAR_VT = 'person-avatar';
-
-// Set on back so Faces names the matching card avatar for the reverse morph.
 export const personNav = { returnId: null as number | null };
+
+const pluralPhotos = (n: number) => `${n.toLocaleString()} ${n === 1 ? 'photo' : 'photos'}`;
 
 export const PersonView = () => {
   const { selectedPerson, setSelectedPerson } = useAppStore();
@@ -22,7 +20,7 @@ export const PersonView = () => {
   useEffect(() => {
     if (!selectedPerson) return;
     getImagesForFace(selectedPerson.id).then(setPaths).catch(console.error);
-  }, [selectedPerson?.id]);
+  }, [selectedPerson]);
 
   if (!selectedPerson) return null;
 
@@ -45,50 +43,60 @@ export const PersonView = () => {
 
   return (
     <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
-      <div className="px-8 pt-6 pb-2 flex items-center gap-5">
+      <header className="px-6 pt-5 pb-4 flex items-center gap-4 shrink-0">
         <button
+          type="button"
           onClick={goBack}
-          className="p-2 rounded-lg text-text-dim hover:bg-surface-hi transition-colors duration-150"
+          className="pressable p-2 rounded-lg text-text-dim hover:text-text hover:bg-surface-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           aria-label="Back to people"
         >
           <ArrowLeft size={18} />
         </button>
-        <img
-          src={getFaceThumbnailUrl(selectedPerson.id)}
-          alt={selectedPerson.name}
-          style={{ viewTransitionName: PERSON_AVATAR_VT } as any}
-          className="w-24 h-24 rounded-full object-cover ring-2 ring-accent/40"
-        />
-        <div>
+        <div className="w-20 h-20 rounded-full overflow-hidden bg-surface-hi img-frame-outline shrink-0">
+          <img
+            src={getFaceThumbnailUrl(selectedPerson.id)}
+            alt={selectedPerson.name}
+            style={{ viewTransitionName: PERSON_AVATAR_VT }}
+            className="w-full h-full object-cover block"
+          />
+        </div>
+        <div className="min-w-0">
           {editing ? (
             <input
               autoFocus
+              aria-label="Edit person name"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => setEditing(false)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') save();
+                if (e.key === 'Enter') void save();
                 if (e.key === 'Escape') setEditing(false);
               }}
-              className="text-3xl font-bold text-text bg-surface-hi border border-accent rounded-lg px-2 focus:outline-none"
+              className="text-2xl font-semibold tracking-[-0.02em] text-text bg-surface-hi border border-accent rounded-lg px-2 py-0.5 focus:outline-none"
             />
           ) : (
-            <h2 className="text-3xl font-bold text-text flex items-center gap-3">
-              {selectedPerson.name}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text truncate">
+                {selectedPerson.name}
+              </h1>
               <button
-                onClick={() => { setDraft(selectedPerson.name); setEditing(true); }}
-                className="p-1.5 rounded-lg text-text-mute hover:text-accent hover:bg-surface-hi transition-colors duration-150"
+                type="button"
+                onClick={() => {
+                  setDraft(selectedPerson.name);
+                  setEditing(true);
+                }}
+                className="pressable p-1.5 rounded-lg text-text-mute hover:text-accent hover:bg-surface-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 aria-label="Edit name"
               >
-                <Pencil size={16} />
+                <Pencil size={15} />
               </button>
-            </h2>
+            </div>
           )}
-          <p className="text-sm text-text-mute mt-1">{paths.length.toLocaleString()} photos</p>
+          <p className="text-[13px] text-text-mute mt-1 tabular-nums">{pluralPhotos(paths.length)}</p>
         </div>
-      </div>
-      <div className="photo-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
-        <PhotoGrid paths={paths} cols={5} />
+      </header>
+      <div className="flex-1 px-6 pb-2 overflow-hidden">
+        <PhotoGrid paths={paths} cols={4} />
       </div>
     </div>
   );

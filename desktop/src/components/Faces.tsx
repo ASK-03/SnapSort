@@ -1,93 +1,168 @@
 import { useEffect, useState } from 'react';
-import { useAppStore } from '../store';
-import { getFaceThumbnailUrl, api } from '../api';
-import { Users, CheckCircle2, Merge } from 'lucide-react';
-import { withViewTransition } from '../lib/viewTransition';
 import { flushSync } from 'react-dom';
+import { Users, Check, Merge } from 'lucide-react';
+import { useAppStore } from '../store';
+import { getFaceThumbnailUrl, api, scanFolder } from '../api';
+import { withViewTransition } from '../lib/viewTransition';
 import { PERSON_AVATAR_VT, personNav } from './PersonView';
 
-// Survives unmount so the grid is on screen the instant PersonView closes
-// (the back transition needs the target card in the DOM synchronously).
-let facesCache: {id: number, name: string, count?: number}[] = [];
+interface FaceItem {
+  id: number;
+  name: string;
+  count?: number;
+}
 
-const FaceCard = ({ face, isSelected, onSelect, onOpen, onNameSave }: {
-  face: {id: number, name: string, count?: number},
-  isSelected: boolean,
-  onSelect: (id: number) => void,
-  onOpen?: (face: {id: number, name: string}, avatar: HTMLElement) => void,
-  onNameSave: (id: number, name: string) => Promise<void>
+// Survives unmount so the grid is on screen the instant PersonView closes.
+let facesCache: FaceItem[] = [];
+
+const pluralPhotos = (n: number) => `${n.toLocaleString()} ${n === 1 ? 'photo' : 'photos'}`;
+
+const PersonCard = ({
+  face,
+  onOpen,
+}: {
+  face: FaceItem;
+  onOpen: (face: FaceItem, el: HTMLElement) => void;
 }) => {
+  const countText = face.count !== undefined ? pluralPhotos(face.count) : '';
+  return (
+    <button
+      type="button"
+      onClick={(e) => onOpen(face, e.currentTarget)}
+      aria-label={countText ? `Open ${face.name}, ${countText}` : `Open ${face.name}`}
+      className="tile-pressable group bg-surface border border-border hover:border-text-mute rounded-xl p-3 flex flex-col items-center gap-2.5 text-center min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      <div className="w-full aspect-square rounded-full overflow-hidden bg-surface-hi img-frame-outline">
+        <img
+          src={getFaceThumbnailUrl(face.id)}
+          alt={face.name}
+          loading="lazy"
+          data-face-avatar
+          style={face.id === personNav.returnId ? { viewTransitionName: PERSON_AVATAR_VT } : undefined}
+          className="hover-zoom-img w-full h-full object-cover block"
+        />
+      </div>
+      <div className="w-full min-w-0 flex flex-col gap-0.5">
+        <span className="text-sm font-medium leading-snug text-text break-words">
+          {face.name}
+        </span>
+        {countText && (
+          <span className="text-xs leading-tight text-text-mute tabular-nums">
+            {countText}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+};
+
+const FaceClusterCard = ({
+  face,
+  isSelected,
+  onSelect,
+  onNameSave,
+}: {
+  face: FaceItem;
+  isSelected: boolean;
+  onSelect: (id: number) => void;
+  onNameSave: (id: number, name: string) => Promise<void>;
+}) => {
+  const [editing, setEditing] = useState(false);
   const [name, setName] = useState(face.name || '');
 
   useEffect(() => {
     setName(face.name || '');
   }, [face.name]);
 
-  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      await onNameSave(face.id, name);
-    }
+  const commit = async () => {
+    setEditing(false);
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === face.name) return;
+    await onNameSave(face.id, trimmed);
   };
 
   return (
     <div
-      className={`bg-surface rounded-lg overflow-hidden border transition-colors duration-150 flex flex-col relative group ${isSelected ? 'border-accent ring-1 ring-accent shadow-md' : 'border-border hover:border-accent/50'}`}
+      className={`bg-surface rounded-lg overflow-hidden border flex flex-col transition-colors duration-150 ${
+        isSelected ? 'border-accent ring-2 ring-inset ring-accent' : 'border-border hover:border-text-mute'
+      }`}
     >
-      <div
-        className={`aspect-square bg-surface-hi relative cursor-pointer ${onOpen ? 'w-4/5 mx-auto mt-3 rounded-full overflow-hidden' : 'w-full'}`}
-        onClick={(e) => onOpen ? onOpen(face, e.currentTarget) : onSelect(face.id)}
+      <button
+        type="button"
+        onClick={() => onSelect(face.id)}
+        aria-label={`Select ${face.name || `cluster ${face.id}`}`}
+        aria-pressed={isSelected}
+        className="tile-pressable img-frame-outline relative aspect-square w-full bg-surface-hi overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
       >
         <img
           src={getFaceThumbnailUrl(face.id)}
-          alt={face.name || `Person ${face.id}`}
+          alt={face.name || `Detected face ${face.id}`}
           loading="lazy"
-          data-face-avatar
-          style={face.id === personNav.returnId ? { viewTransitionName: PERSON_AVATAR_VT } as any : undefined}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover block"
         />
         {isSelected && (
-          <div className="absolute top-1.5 right-1.5 text-accent bg-bg rounded-full shadow-sm">
-            <CheckCircle2 size={16} className="fill-current text-accent stroke-bg" />
-          </div>
+          <span
+            aria-hidden="true"
+            className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-accent text-on-accent grid place-items-center"
+          >
+            <Check size={12} strokeWidth={3} />
+          </span>
         )}
-      </div>
-      <div className="p-2">
-        {isSelected && !onOpen ? (
+      </button>
+
+      <div className="p-2 flex flex-col gap-0.5 min-w-0">
+        {editing ? (
           <input
             type="text"
             autoFocus
             value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Name..."
-            className="w-full bg-surface-hi border border-accent rounded px-1.5 py-0.5 text-xs text-text focus:outline-none placeholder:text-text-mute"
+            aria-label="Person name"
+            placeholder="Name…"
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => void commit()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void commit();
+              }
+              if (e.key === 'Escape') {
+                setName(face.name || '');
+                setEditing(false);
+              }
+            }}
+            className="w-full bg-bg border border-accent rounded px-1.5 py-0.5 text-[13px] text-text focus:outline-none placeholder:text-text-mute"
           />
         ) : (
-          <h3
-            className="text-text font-medium text-xs truncate cursor-pointer hover:text-accent transition-colors duration-150"
-            onClick={(e) => onOpen ? onOpen(face, e.currentTarget) : onSelect(face.id)}
+          <button
+            type="button"
+            onClick={() => {
+              setName(face.name || '');
+              setEditing(true);
+            }}
+            className="text-left text-[13px] font-medium text-text hover:text-accent truncate rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            {face.name || 'Unknown'}
-          </h3>
+            {face.name || 'Name person…'}
+          </button>
         )}
-        <p className="text-[10px] text-text-mute mt-0.5 flex justify-between">
-          <span>Person #{face.id}</span>
-          {face.count !== undefined && <span>{face.count} photos</span>}
-        </p>
+        <span className="text-xs text-text-mute tabular-nums">
+          {face.count !== undefined ? pluralPhotos(face.count) : `Cluster #${face.id}`}
+        </span>
       </div>
     </div>
   );
 };
 
 export const Faces = () => {
-  const { viewMode, setSelectedPerson } = useAppStore();
-  const [faces, setFaces] = useState(facesCache);
+  const { viewMode, setViewMode, setSelectedPerson, setIsScanning, setScanningFolder } = useAppStore();
+  const [faces, setFaces] = useState<FaceItem[]>(facesCache);
   const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
 
   const fetchFaces = () => {
     api.get('/faces')
-      .then(res => { facesCache = res.data.faces; setFaces(res.data.faces); })
+      .then((res) => {
+        facesCache = res.data.faces;
+        setFaces(res.data.faces);
+      })
       .catch(console.error);
   };
 
@@ -98,15 +173,16 @@ export const Faces = () => {
   }, [viewMode]);
 
   const toggleSelect = (id: number) => {
-    setSelectedFaceIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    setSelectedFaceIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
-  const openPerson = (face: {id: number, name: string}, el: HTMLElement) => {
-    // Name the clicked avatar so the browser morphs it into PersonView's header.
+  const openPerson = (face: FaceItem, el: HTMLElement) => {
     personNav.returnId = null;
-    document.querySelectorAll<HTMLElement>('[data-face-avatar]').forEach(a => { a.style.viewTransitionName = ''; });
+    document.querySelectorAll<HTMLElement>('[data-face-avatar]').forEach((a) => {
+      a.style.viewTransitionName = '';
+    });
     const avatar = el.querySelector('img') ?? el;
     (avatar as HTMLElement).style.viewTransitionName = PERSON_AVATAR_VT;
     withViewTransition(() => flushSync(() => setSelectedPerson({ id: face.id, name: face.name })));
@@ -115,92 +191,116 @@ export const Faces = () => {
   const handleNameSave = async (id: number, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-
     try {
       await api.put(`/faces/${id}`, { name: trimmed });
-      setSelectedFaceIds(prev => prev.filter(x => x !== id));
+      setSelectedFaceIds((prev) => prev.filter((x) => x !== id));
       fetchFaces();
     } catch (e) {
-      console.error("Naming failed", e);
+      console.error('Naming failed', e);
     }
   };
 
   const handleMerge = async () => {
     if (selectedFaceIds.length < 2) return;
-
-    // Find all selected face objects to check which has the most "information"
-    const selected = faces.filter(f => selectedFaceIds.includes(f.id));
-
-    // Sort logic:
-    // 1. Faces with a name come first.
-    // 2. If both have a name (or neither do), the one with more photos (count) comes first.
+    const selected = faces.filter((f) => selectedFaceIds.includes(f.id));
     selected.sort((a, b) => {
       const aHasName = a.name && a.name.trim() !== '' ? 1 : 0;
       const bHasName = b.name && b.name.trim() !== '' ? 1 : 0;
-
-      if (aHasName !== bHasName) {
-        return bHasName - aHasName; // 1 (named) before 0 (unnamed)
-      }
-
-      // If both named or both unnamed, sort by count (descending)
-      const aCount = a.count || 0;
-      const bCount = b.count || 0;
-      return bCount - aCount;
+      if (aHasName !== bHasName) return bHasName - aHasName;
+      return (b.count || 0) - (a.count || 0);
     });
 
     const primary_id = selected[0].id;
-    const other_ids = selectedFaceIds.filter(id => id !== primary_id);
+    const other_ids = selectedFaceIds.filter((id) => id !== primary_id);
 
     try {
       await api.post('/faces/merge', { primary_id, other_ids });
       setSelectedFaceIds([]);
       fetchFaces();
     } catch (e) {
-      console.error("Merge failed", e);
+      console.error('Merge failed', e);
+    }
+  };
+
+  const handleAddFolder = async () => {
+    const folderPath = await window.electronAPI?.openDirectory();
+    if (folderPath) {
+      const parts = folderPath.split(/[\\/]/);
+      setScanningFolder(parts[parts.length - 1] || folderPath);
+      setIsScanning(true);
+      await scanFolder(folderPath);
     }
   };
 
   if (viewMode !== 'faces' && viewMode !== 'people') return null;
 
-  const displayFaces = viewMode === 'people'
-    ? faces.filter(f => f.name && f.name.trim() !== '')
+  const isPeople = viewMode === 'people';
+  const displayFaces = isPeople
+    ? faces.filter((f) => f.name && f.name.trim() !== '')
     : faces;
+
+  const countLabel = isPeople
+    ? `${displayFaces.length.toLocaleString()} ${displayFaces.length === 1 ? 'person' : 'people'}`
+    : `${displayFaces.length.toLocaleString()} ${displayFaces.length === 1 ? 'cluster' : 'clusters'}`;
 
   return (
     <div className="flex-1 flex flex-col bg-bg h-full overflow-hidden">
-      <div className="px-8 py-4 flex items-center justify-between">
-        <span className="text-sm text-text-mute">{displayFaces.length.toLocaleString()} {viewMode === 'people' ? 'named people' : 'people identified'}</span>
+      <header className="flex shrink-0 items-baseline justify-between gap-4 px-6 pt-5 pb-3.5">
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] text-text">
+            {isPeople ? 'People' : 'Faces'}
+          </h1>
+          <span className="text-[13px] text-text-mute tabular-nums">· {countLabel}</span>
+        </div>
 
-        {selectedFaceIds.length > 0 && (
-          <div className="flex items-center gap-3">
-            {viewMode === 'faces' && selectedFaceIds.length > 1 && (
-              <button
-                onClick={handleMerge}
-                className="flex items-center gap-2 bg-surface-hi hover:brightness-110 text-text px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-150"
-              >
-                <Merge size={16} />
-                Merge {selectedFaceIds.length}
-              </button>
-            )}
-          </div>
+        {!isPeople && selectedFaceIds.length > 1 && (
+          <button
+            type="button"
+            onClick={() => void handleMerge()}
+            className="pressable inline-flex items-center gap-2 bg-surface border border-border hover:bg-surface-hi text-text px-3.5 py-1.5 rounded-lg text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Merge size={15} aria-hidden="true" />
+            <span className="tabular-nums">Merge {selectedFaceIds.length}</span>
+          </button>
         )}
-      </div>
+      </header>
 
-      <div className="card-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-y-auto">
+      <div className="flex-1 px-6 pb-6 overflow-y-auto">
         {displayFaces.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-text-mute flex-col gap-4">
-            <Users size={48} className="opacity-20" />
-            <p>No {viewMode === 'people' ? 'named people' : 'faces'} found yet.</p>
+          <div className="reveal-soft h-full flex flex-col items-center justify-center gap-3 text-center">
+            <div className="w-12 h-12 rounded-xl bg-surface border border-border grid place-items-center text-text-dim">
+              <Users size={20} strokeWidth={1.75} aria-hidden="true" />
+            </div>
+            <h2 className="text-base font-semibold text-text">
+              {isPeople ? 'No named people yet' : 'No faces detected yet'}
+            </h2>
+            <p className="text-[13px] text-text-dim max-w-[36ch]">
+              {isPeople
+                ? 'Name face clusters in Faces so people appear here.'
+                : 'Add a folder with photos to detect and group faces on your device.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => (isPeople ? setViewMode('faces') : void handleAddFolder())}
+              className="pressable rounded-lg border border-border bg-surface text-text hover:bg-surface-hi px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {isPeople ? 'Go to Faces' : 'Add folder'}
+            </button>
+          </div>
+        ) : isPeople ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(144px,1fr))] gap-4">
+            {displayFaces.map((face) => (
+              <PersonCard key={face.id} face={face} onOpen={openPerson} />
+            ))}
           </div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2.5">
             {displayFaces.map((face) => (
-              <FaceCard
+              <FaceClusterCard
                 key={face.id}
                 face={face}
                 isSelected={selectedFaceIds.includes(face.id)}
                 onSelect={toggleSelect}
-                onOpen={viewMode === 'people' ? openPerson : undefined}
                 onNameSave={handleNameSave}
               />
             ))}
