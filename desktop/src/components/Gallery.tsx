@@ -116,7 +116,7 @@ function SearchResults({ query, cols }: { query: string; cols: number }) {
           {summary}
         </span>
       </header>
-      <div className="search-results-grid flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
+      <div className="photo-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
         {result.status === 'ready' && result.paths.length > 0 && <PhotoGrid paths={result.paths} cols={cols} />}
         {(result.status === 'error' || (result.status === 'ready' && !result.paths.length)) && (
           <div className="h-full pr-7 flex flex-col items-center justify-center gap-3 text-text-dim">
@@ -168,7 +168,7 @@ export const Gallery = ({ query }: { query?: string }) => {
               </div>
             ) : <span className="text-sm text-text-mute">{displayImages.length.toLocaleString()} results</span>}
           </div>
-          <div className="flex-1 px-8 pb-4 overflow-hidden">
+          <div className="photo-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-hidden">
             {displayImages.length ? <PhotoGrid paths={displayImages} cols={numCols} /> : (
               <div className="h-full flex items-center justify-center text-text-mute flex-col gap-4">
                 <Grid2X2 size={48} className="opacity-20" />

@@ -114,7 +114,9 @@
 }
 ::-webkit-scrollbar-thumb {
   background: var(--ss-border);
+  border: 2px solid transparent;
   border-radius: 5px;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ss-text-mute);
@@ -122,13 +124,15 @@
 
 /* The transparent part of the native scrollbar keeps the last column clear
    and gives the slim visible thumb a generous drag target. */
-.search-results-grid [data-virtuoso-scroller] {
+.photo-grid-scroll [data-virtuoso-scroller], .card-grid-scroll {
   scrollbar-gutter: stable;
 }
-.search-results-grid [data-virtuoso-scroller]::-webkit-scrollbar:vertical {
+.photo-grid-scroll [data-virtuoso-scroller]::-webkit-scrollbar:vertical,
+.card-grid-scroll::-webkit-scrollbar:vertical {
   width: 36px;
 }
-.search-results-grid [data-virtuoso-scroller]::-webkit-scrollbar-thumb:vertical {
+.photo-grid-scroll [data-virtuoso-scroller]::-webkit-scrollbar-thumb:vertical,
+.card-grid-scroll::-webkit-scrollbar-thumb:vertical {
   border-left: 27px solid transparent;
   border-right: 4px solid transparent;
   border-radius: 30px 7px 7px 30px / 3px;

@@ -186,7 +186,7 @@ export const Faces = () => {
         )}
       </div>
 
-      <div className="flex-1 px-8 pb-4 overflow-y-auto">
+      <div className="card-grid-scroll flex-1 min-h-0 pl-8 pr-1 pb-4 overflow-y-auto">
         {displayFaces.length === 0 ? (
           <div className="h-full flex items-center justify-center text-text-mute flex-col gap-4">
             <Users size={48} className="opacity-20" />
