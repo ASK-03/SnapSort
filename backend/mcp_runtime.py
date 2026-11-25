@@ -22,6 +22,7 @@ PROTOCOL_VERSION = 1
 RUNTIME_FILENAME = "mcp-runtime.json"
 POLICY_FILENAME = "mcp-policy.json"
 AUDIT_FILENAME = "mcp-audit.log"
+DESKTOP_LAUNCH_FILENAME = "desktop-launch.json"
 BACKEND_LOCK_FILENAME = "backend.lock"
 STARTUP_LOCK_FILENAME = "startup.lock"
 
@@ -32,7 +33,10 @@ DEFAULT_POLICY: dict[str, Any] = {
     "mcp_enabled": False,
     "headless_enabled": False,
     "allow_agent_scan": False,
+    "allow_viewer_open": True,
+    "allow_launch_desktop": False,
     "allow_previews": False,
+    "max_preview_images": 5,
     "max_headless_scan_images": 5000,
     "approved_roots": [],
 }
@@ -48,6 +52,10 @@ def policy_file_path(data_dir: str) -> str:
 
 def audit_file_path(data_dir: str) -> str:
     return os.path.join(os.path.abspath(data_dir), AUDIT_FILENAME)
+
+
+def desktop_launch_file_path(data_dir: str) -> str:
+    return os.path.join(os.path.abspath(data_dir), DESKTOP_LAUNCH_FILENAME)
 
 
 def _set_private_permissions(path: str) -> None:
@@ -129,6 +137,24 @@ def _normalize_roots(roots: Any) -> list[str]:
     return normalized
 
 
+def read_desktop_launch_info(data_dir: str) -> dict[str, Any] | None:
+    """Read desktop-launch.json if present and valid JSON."""
+    path = desktop_launch_file_path(data_dir)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def write_desktop_launch_info(data_dir: str, info: dict[str, Any]) -> None:
+    """Write desktop-launch.json atomically with restricted permissions."""
+    write_json_atomic_private(desktop_launch_file_path(data_dir), info)
+
+
 def normalize_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
     """Merge a policy dict with safe defaults and canonicalize roots."""
     policy = dict(DEFAULT_POLICY)
@@ -136,7 +162,14 @@ def normalize_policy(raw: dict[str, Any] | None) -> dict[str, Any]:
         policy["mcp_enabled"] = bool(raw.get("mcp_enabled", False))
         policy["headless_enabled"] = bool(raw.get("headless_enabled", False))
         policy["allow_agent_scan"] = bool(raw.get("allow_agent_scan", False))
+        policy["allow_viewer_open"] = bool(raw.get("allow_viewer_open", True))
+        policy["allow_launch_desktop"] = bool(raw.get("allow_launch_desktop", False))
         policy["allow_previews"] = bool(raw.get("allow_previews", False))
+        max_prev = raw.get("max_preview_images", DEFAULT_POLICY["max_preview_images"])
+        try:
+            policy["max_preview_images"] = max(1, min(10, int(max_prev)))
+        except (TypeError, ValueError):
+            policy["max_preview_images"] = DEFAULT_POLICY["max_preview_images"]
         cap = raw.get("max_headless_scan_images", DEFAULT_POLICY["max_headless_scan_images"])
         try:
             policy["max_headless_scan_images"] = max(1, min(100000, int(cap)))

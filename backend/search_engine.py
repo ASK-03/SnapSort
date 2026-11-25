@@ -86,16 +86,9 @@ class SearchEngine:
         return _PENALTY
 
     def _embed_query(self, query: str) -> np.ndarray:
-        """Encode query with lightweight CLIP prompt ensembling to avoid literal-phrasing misses."""
+        """Encode the user query directly without rewriting it into template phrases."""
         proc = self._get_clip_processor()
-        cleaned = query.strip()
-        emb1 = np.asarray(proc.embed_text(cleaned), dtype="float32")
-        if cleaned.lower().startswith("a photo of"):
-            return emb1
-        emb2 = np.asarray(proc.embed_text(f"a photo of {cleaned}"), dtype="float32")
-        combined = 0.5 * (emb1 + emb2)
-        norm = float(np.linalg.norm(combined))
-        return (combined / norm).astype("float32") if norm > 0 else emb1
+        return np.asarray(proc.embed_text(query.strip()), dtype="float32")
 
     def search_with_diagnostics(
         self,
@@ -104,13 +97,17 @@ class SearchEngine:
         min_score: float = 0.25,
         person_id: int | None = None,
         folder: str | None = None,
-    ) -> tuple[list[tuple[str, float]], float | None]:
+        offset: int = 0,
+    ) -> tuple[list[tuple[str, float]], int, float | None]:
         """
-        Semantic search with optional pre-candidate person/folder filtering.
-        Returns ([(image_path, score), ...], highest_below_threshold).
+        Semantic search with optional pre-candidate person/folder filtering and pagination.
+        Returns ([(image_path, score), ...], total_matches, highest_below_threshold).
         """
         if self.clip_index.ntotal == 0 or not query or not query.strip():
-            return [], None
+            return [], 0, None
+
+        safe_offset = max(0, int(offset))
+        safe_top_k = max(1, int(top_k))
 
         allowed_ids: set[int] | None = None
         if person_id is not None:
@@ -120,7 +117,7 @@ class SearchEngine:
             allowed_ids = folder_ids if allowed_ids is None else (allowed_ids & folder_ids)
 
         if allowed_ids is not None and not allowed_ids:
-            return [], None
+            return [], 0, None
 
         use_name_rerank = person_id is None
         name_to_fids = self._extract_and_resolve_names(query) if use_name_rerank else {}
@@ -135,12 +132,12 @@ class SearchEngine:
         )
 
         query_emb = self._embed_query(query)
+        k_fetch = max(50, (safe_offset + safe_top_k) * 3)
 
         if allowed_ids is not None:
-            k_fetch = top_k * 3 if names_found else top_k
             candidates = self.clip_index.search_subset(query_emb, allowed_ids, k=k_fetch)
         else:
-            candidates = self.clip_index.search(query_emb, k=top_k * 3)
+            candidates = self.clip_index.search(query_emb, k=k_fetch)
 
         scored: list[tuple[str, float]] = []
         seen_images: set[int] = set()
@@ -169,7 +166,9 @@ class SearchEngine:
                 scored.append((path, float(final_score)))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        return scored[:top_k], (None if scored else highest_below)
+        total_matches = len(scored)
+        page = scored[safe_offset : safe_offset + safe_top_k]
+        return page, total_matches, (None if scored else highest_below)
 
     def search(
         self,
@@ -183,7 +182,7 @@ class SearchEngine:
         Semantic search with optional pre-candidate person/folder filtering.
         Returns [(image_path, score), ...] sorted by descending score.
         """
-        results, _ = self.search_with_diagnostics(
+        results, _, _ = self.search_with_diagnostics(
             query=query,
             top_k=top_k,
             min_score=min_score,

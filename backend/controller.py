@@ -451,9 +451,10 @@ class Controller:
         person_id: int | None = None,
         folder: str | None = None,
         min_score: float | None = None,
-    ) -> tuple[list[tuple[str, float]], float | None]:
+        offset: int = 0,
+    ) -> tuple[list[tuple[str, float]], int, float | None]:
         if not query or not query.strip():
-            return [], None
+            return [], 0, None
         effective_min = 0.25 if min_score is None else float(min_score)
         return self.search_engine.search_with_diagnostics(
             query,
@@ -461,6 +462,7 @@ class Controller:
             min_score=effective_min,
             person_id=person_id,
             folder=folder,
+            offset=offset,
         )
 
     def search(
@@ -471,7 +473,7 @@ class Controller:
         folder: str | None = None,
         min_score: float | None = None,
     ):
-        results, _ = self.search_with_diagnostics(
+        results, _, _ = self.search_with_diagnostics(
             query,
             top_k=top_k,
             person_id=person_id,

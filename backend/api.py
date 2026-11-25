@@ -165,6 +165,7 @@ async def lifespan(app_instance: FastAPI):
     app_instance.state.last_activity_ts = time.monotonic()
     app_instance.state.last_mcp_ts = 0.0
     app_instance.state.preview_timestamps = []
+    app_instance.state.viewer_request = None
 
     from controller import Controller
 
@@ -251,6 +252,11 @@ class AttachRequest(BaseModel):
 class McpScanRequest(BaseModel):
     folder_path: str
     wait_seconds: float = 0.0
+
+
+class McpViewerOpenRequest(BaseModel):
+    paths: list[str]
+    query: str | None = None
 
 
 @app.get("/api/status")
@@ -764,14 +770,24 @@ async def get_images_for_face(
         raise HTTPException(status_code=404, detail=f"Unknown face cluster ID: {face_id}")
 
     clamped_limit = max(1, min(100, limit)) if limit is not None else None
+    safe_offset = max(0, offset)
     images = ctrl.get_images_for_face(
         canonical_id,
         folder=folder,
         limit=clamped_limit,
-        offset=max(0, offset),
+        offset=safe_offset,
     )
+    if folder is None:
+        total = len(ctrl.db.get_image_ids_for_face(canonical_id))
+    else:
+        total = len(ctrl.get_images_for_face(canonical_id, folder=folder))
+    has_more = (safe_offset + len(images)) < total if clamped_limit is not None else False
     return {
         "images": images,
+        "returned": len(images),
+        "total": total,
+        "offset": safe_offset,
+        "has_more": has_more,
         "face_id": canonical_id,
         "merged_from": face_id if was_merged else None,
     }
@@ -807,63 +823,69 @@ async def search_images(
     person_name: str | None = None,
     folder: str | None = None,
     limit: int = 20,
+    offset: int = 0,
     min_score: float | None = None,
     include_meta: bool = False,
 ):
     """Semantic text, person-filtered, and folder-filtered search."""
     ctrl = controller()
-    clamped_limit = max(1, min(100, limit))
+    safe_offset = max(0, int(offset))
+    max_limit = 20 if include_meta else 100
+    clamped_limit = max(1, min(max_limit, int(limit)))
     policy = load_policy(app.state.data_dir)
     stats = ctrl.db.get_stats()
     resolved_person_id = None
-    person_photo_count: int | None = None
+
+    preview_options = {
+        "can_open_in_viewer": bool(policy["allow_viewer_open"]),
+        "desktop_running": bool(app.state.desktop_attached),
+        "can_launch_app": bool(policy["allow_launch_desktop"]),
+        "can_fetch_preview": bool(policy["allow_previews"]),
+        "max_preview_images": int(policy["max_preview_images"]),
+    }
 
     if person_id is not None:
         resolved_person_id, _ = ctrl.db.resolve_face_id(person_id)
         if not ctrl.db.face_exists(resolved_person_id):
             raise HTTPException(status_code=404, detail=f"Unknown face cluster ID: {person_id}")
-        person_photo_count = len(ctrl.db.get_image_ids_for_face(resolved_person_id))
     elif person_name and person_name.strip():
         matches = ctrl.db.get_all_faces_with_counts(name_filter=person_name.strip(), limit=20)
         if not matches:
             if not include_meta:
                 return []
             return {
+                "query": q,
                 "results": [],
+                "returned": 0,
+                "total_matches": 0,
+                "offset": safe_offset,
+                "has_more": False,
                 "status": "person_not_found",
-                "message": (
+                "hint": (
                     f"No indexed person matches '{person_name.strip()}'. "
                     "Ask the user to name them in SnapSort's People view."
                 ),
-                "resolved_person_id": None,
-                "person_photo_count": 0,
-                "total_indexed_photos": stats["photos"],
-                "clip_indexed_photos": stats["clip_indexed_photos"],
-                "indexing_in_progress": ctrl.is_scanning,
-                "active_scan_id": ctrl.active_job_id,
-                "allow_previews": policy["allow_previews"],
+                "preview_options": preview_options,
             }
         if len(matches) > 1:
             if not include_meta:
                 return []
             return {
+                "query": q,
                 "results": [],
+                "returned": 0,
+                "total_matches": 0,
+                "offset": safe_offset,
+                "has_more": False,
                 "status": "disambiguation_required",
                 "matching_people": matches,
-                "message": (
-                    f"Multiple face clusters match '{person_name.strip()}'. "
+                "hint": (
+                    f"Multiple named face clusters match '{person_name.strip()}'. "
                     "Ask the user which person_id to search."
                 ),
-                "resolved_person_id": None,
-                "person_photo_count": None,
-                "total_indexed_photos": stats["photos"],
-                "clip_indexed_photos": stats["clip_indexed_photos"],
-                "indexing_in_progress": ctrl.is_scanning,
-                "active_scan_id": ctrl.active_job_id,
-                "allow_previews": policy["allow_previews"],
+                "preview_options": preview_options,
             }
         resolved_person_id = matches[0]["id"]
-        person_photo_count = matches[0]["count"]
 
     if min_score is not None:
         effective_min = max(0.0, min(1.0, float(min_score)))
@@ -872,13 +894,14 @@ async def search_images(
     else:
         effective_min = 0.25
 
-    results, highest_below = await asyncio.to_thread(
+    results, total_matches, _ = await asyncio.to_thread(
         ctrl.search_with_diagnostics,
         q,
         top_k=clamped_limit,
         person_id=resolved_person_id,
         folder=folder,
         min_score=effective_min,
+        offset=safe_offset,
     )
     items = [{"path": path, "score": float(score)} for path, score in results]
     if not include_meta:
@@ -890,7 +913,7 @@ async def search_images(
         if stats["photos"] == 0 or stats["clip_indexed_photos"] == 0:
             status = "empty_library"
             hint = (
-                "No CLIP-indexed photos are available yet. Call list_approved_folders to check "
+                "No indexed photos are searchable yet. Call get_library_overview once to inspect "
                 "folder status or ask the user to scan a folder in SnapSort."
             )
         elif folder and ctrl.db.count_images_in_folder(folder) == 0:
@@ -903,28 +926,24 @@ async def search_images(
             status = "no_matches"
             if resolved_person_id is not None:
                 hint = (
-                    "No scene matches met the threshold for that person. Do NOT keep retrying "
-                    "rephrased queries—you may call get_person_images(person_id) or report this to the user."
+                    "No scene matches were found for that person. Do not keep retrying rephrased queries—"
+                    "you can call get_person_images(person_id) or report this to the user."
                 )
             else:
                 hint = (
-                    "No images met the similarity threshold. Make at most one broader search "
-                    "(for example with min_score=0.18); do not loop over synonym variations."
+                    "No matching photos were found. Do not loop over rephrased queries—report this to the user."
                 )
 
     return {
+        "query": q,
         "results": items,
+        "returned": len(items),
+        "total_matches": total_matches,
+        "offset": safe_offset,
+        "has_more": (safe_offset + len(items)) < total_matches,
         "status": status,
         "hint": hint,
-        "resolved_person_id": resolved_person_id,
-        "person_photo_count": person_photo_count,
-        "total_indexed_photos": stats["photos"],
-        "clip_indexed_photos": stats["clip_indexed_photos"],
-        "indexing_in_progress": ctrl.is_scanning,
-        "active_scan_id": ctrl.active_job_id,
-        "allow_previews": policy["allow_previews"],
-        "min_score_used": effective_min,
-        "highest_below_threshold": highest_below,
+        "preview_options": preview_options,
     }
 
 
@@ -1017,10 +1036,8 @@ def _folder_has_supported_files(folder: str) -> bool:
     return False
 
 
-@app.get("/api/mcp/folders")
-async def mcp_list_approved_folders():
-    policy = _require_mcp_policy()
-    ctrl = controller()
+async def _build_approved_folders_payload(policy: dict, ctrl) -> dict:
+    """Inspect user-approved roots and compute folder statuses + actionable guidance."""
     folders = []
     for root in policy["approved_roots"]:
         exists = os.path.isdir(root)
@@ -1082,18 +1099,68 @@ async def mcp_list_approved_folders():
     }
 
 
+@app.get("/api/mcp/folders")
+async def mcp_list_approved_folders():
+    policy = _require_mcp_policy()
+    return await _build_approved_folders_payload(policy, controller())
+
+
+@app.get("/api/mcp/overview")
+async def mcp_overview(
+    name_filter: str | None = None,
+    people_limit: int = 20,
+    people_offset: int = 0,
+):
+    """Single-call orientation returning library stats, approved folders, named people, and preview capabilities."""
+    policy = _require_mcp_policy()
+    ctrl = controller()
+    folders_payload = await _build_approved_folders_payload(policy, ctrl)
+    stats = ctrl.db.get_stats()
+    clamped_people = max(1, min(50, int(people_limit)))
+    safe_offset = max(0, int(people_offset))
+    people_rows = ctrl.db.get_all_faces_with_counts(
+        name_filter=name_filter,
+        limit=clamped_people + 1,
+        offset=safe_offset,
+    )
+    has_more_people = len(people_rows) > clamped_people
+    return {
+        "status": folders_payload["status"],
+        "action_required": folders_payload["action_required"],
+        "stats": {
+            "photos": stats["photos"],
+            "people": stats["people"],
+            "indexing_in_progress": ctrl.is_scanning,
+        },
+        "folders": folders_payload["folders"],
+        "people": people_rows[:clamped_people],
+        "has_more_people": has_more_people,
+        "capabilities": {
+            "viewer_enabled": bool(policy["allow_viewer_open"]),
+            "desktop_running": bool(app.state.desktop_attached),
+            "can_launch_app": bool(policy["allow_launch_desktop"]),
+            "allow_previews": bool(policy["allow_previews"]),
+            "max_preview_images": int(policy["max_preview_images"]),
+            "allow_agent_scan": bool(policy["allow_agent_scan"]),
+        },
+    }
+
+
 @app.get("/api/mcp/folders/images")
 async def mcp_list_folder_images(folder: str, limit: int = 20, offset: int = 0):
     policy = _require_mcp_policy()
     if not is_path_within_approved_roots(folder, policy["approved_roots"]):
         raise HTTPException(status_code=403, detail="Folder is not within user-approved library roots")
     real_folder = os.path.realpath(folder)
+    ctrl = controller()
     clamped_limit = max(1, min(100, limit))
-    images = controller().db.get_images_in_folder_paginated(
+    safe_offset = max(0, offset)
+    images = ctrl.db.get_images_in_folder_paginated(
         real_folder,
         limit=clamped_limit,
-        offset=max(0, offset),
+        offset=safe_offset,
     )
+    total = ctrl.db.count_images_in_folder(real_folder)
     status = "ok"
     action_required: str | None = None
     if not images:
@@ -1117,6 +1184,10 @@ async def mcp_list_folder_images(folder: str, limit: int = 20, offset: int = 0):
             )
     return {
         "images": images,
+        "returned": len(images),
+        "total": total,
+        "offset": safe_offset,
+        "has_more": (safe_offset + len(images)) < total,
         "folder": real_folder,
         "status": status,
         "action_required": action_required,
@@ -1151,17 +1222,71 @@ async def mcp_scan_folder(req: McpScanRequest):
     return job
 
 
+@app.post("/api/mcp/viewer/open")
+async def mcp_open_viewer(req: McpViewerOpenRequest):
+    policy = _require_mcp_policy()
+    if not policy["allow_viewer_open"]:
+        raise HTTPException(status_code=403, detail="Opening SnapSort viewer is disabled in Settings")
+
+    raw_paths = req.paths or []
+    if not raw_paths:
+        raise HTTPException(status_code=400, detail="Provide at least 1 image path to open in viewer")
+    if len(raw_paths) > 20:
+        raise HTTPException(status_code=400, detail="Cannot open more than 20 images in the viewer at once")
+
+    valid_paths: list[str] = []
+    seen: set[str] = set()
+    for p in raw_paths:
+        real_p = _resolve_indexed_path(p)
+        if policy["approved_roots"] and not is_path_within_approved_roots(real_p, policy["approved_roots"]):
+            raise HTTPException(status_code=403, detail="Image is outside approved library roots")
+        if real_p not in seen:
+            seen.add(real_p)
+            valid_paths.append(real_p)
+
+    clean_query = req.query.strip() if isinstance(req.query, str) and req.query.strip() else None
+    app.state.viewer_request = {
+        "id": str(uuid.uuid4()),
+        "paths": valid_paths,
+        "query": clean_query,
+        "created_at": time.time(),
+    }
+    desktop_running = bool(app.state.desktop_attached)
+    return {
+        "status": "opened" if desktop_running else "app_not_running",
+        "desktop_running": desktop_running,
+        "can_launch_app": bool(policy["allow_launch_desktop"]),
+        "count": len(valid_paths),
+        "paths": valid_paths,
+    }
+
+
+@app.get("/api/client/viewer/pending")
+async def consume_pending_viewer_request():
+    """Consume the latest pending viewer request for the Electron desktop app."""
+    req = getattr(app.state, "viewer_request", None)
+    app.state.viewer_request = None
+    return {"request": req}
+
+
 @app.get("/api/mcp/preview")
 async def mcp_preview(path: str, max_size: int = 1024):
     policy = _require_mcp_policy()
     if not policy["allow_previews"]:
         raise HTTPException(status_code=403, detail="Visual previews are disabled in Settings")
 
+    max_preview = int(policy["max_preview_images"])
     now = time.monotonic()
     recent = [t for t in app.state.preview_timestamps if (now - t) < 60.0]
-    if len(recent) >= 30:
+    if len(recent) >= max_preview:
         app.state.preview_timestamps = recent
-        raise HTTPException(status_code=429, detail="Preview rate limit exceeded")
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Preview limit reached (max {max_preview} images). Use open_in_viewer to show "
+                "photos privately in SnapSort, or wait before requesting more."
+            ),
+        )
     recent.append(now)
     app.state.preview_timestamps = recent
 
