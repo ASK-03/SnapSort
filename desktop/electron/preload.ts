@@ -24,4 +24,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   disconnectMcpClient: (clientId: string) => ipcRenderer.invoke('mcp:disconnectClient', clientId),
   getMcpAuditLog: () => ipcRenderer.invoke('mcp:getAuditLog'),
   stopMcpHeadless: () => ipcRenderer.invoke('mcp:stopHeadless'),
+  onMcpOpenViewer: (cb: (req: { id: string; paths: string[]; query?: string | null }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, val: { id: string; paths: string[]; query?: string | null }) => cb(val)
+    ipcRenderer.on('mcp:open-viewer', handler)
+    return () => ipcRenderer.removeListener('mcp:open-viewer', handler)
+  },
+  consumePendingMcpViewer: () => ipcRenderer.invoke('mcp:consumePendingViewer'),
 })

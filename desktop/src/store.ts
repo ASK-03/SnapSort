@@ -45,6 +45,9 @@ interface AppState {
   folderFilter: string | null;
   setFolderFilter: (folder: string | null) => void;
 
+  mcpViewerSession: { paths: string[]; query: string | null } | null;
+  setMcpViewerSession: (session: { paths: string[]; query: string | null } | null) => void;
+
   imageVersions: Record<string, number>;
   bumpImageVersion: (path: string) => void;
 }
@@ -94,6 +97,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   folderFilter: null,
   setFolderFilter: (folderFilter) => set({ folderFilter }),
+
+  mcpViewerSession: null,
+  setMcpViewerSession: (mcpViewerSession) => set({ mcpViewerSession }),
 
   imageVersions: {},
   bumpImageVersion: (path) => set((state) => ({

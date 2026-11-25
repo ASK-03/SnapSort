@@ -23,7 +23,16 @@ let backendPort = 8000
 let backendToken = ''
 let backendInstanceId = ''
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+let viewerPollTimer: ReturnType<typeof setInterval> | null = null
 let isDetaching = false
+
+interface McpViewerRequest {
+  id: string
+  paths: string[]
+  query?: string | null
+}
+
+let pendingViewerRequest: McpViewerRequest | null = null
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
@@ -32,7 +41,10 @@ interface McpPolicy {
   mcp_enabled: boolean
   headless_enabled: boolean
   allow_agent_scan: boolean
+  allow_viewer_open: boolean
+  allow_launch_desktop: boolean
   allow_previews: boolean
+  max_preview_images: number
   max_headless_scan_images: number
   approved_roots: string[]
 }
@@ -42,7 +54,10 @@ const DEFAULT_POLICY: McpPolicy = {
   mcp_enabled: false,
   headless_enabled: false,
   allow_agent_scan: false,
+  allow_viewer_open: true,
+  allow_launch_desktop: false,
   allow_previews: false,
+  max_preview_images: 5,
   max_headless_scan_images: 5000,
   approved_roots: [],
 }
@@ -107,12 +122,16 @@ function normalizePolicy(raw: Partial<McpPolicy> | null | undefined): McpPolicy 
     }
   }
   const cap = Number(raw?.max_headless_scan_images ?? DEFAULT_POLICY.max_headless_scan_images)
+  const maxPreview = Number(raw?.max_preview_images ?? DEFAULT_POLICY.max_preview_images)
   return {
     version: 1,
     mcp_enabled: Boolean(raw?.mcp_enabled),
     headless_enabled: Boolean(raw?.headless_enabled),
     allow_agent_scan: Boolean(raw?.allow_agent_scan),
+    allow_viewer_open: raw?.allow_viewer_open !== undefined ? Boolean(raw.allow_viewer_open) : true,
+    allow_launch_desktop: Boolean(raw?.allow_launch_desktop),
     allow_previews: Boolean(raw?.allow_previews),
+    max_preview_images: Number.isFinite(maxPreview) ? Math.max(1, Math.min(10, Math.round(maxPreview))) : 5,
     max_headless_scan_images: Number.isFinite(cap) ? Math.max(1, Math.min(100000, Math.round(cap))) : 5000,
     approved_roots,
   }
@@ -346,6 +365,10 @@ async function detachOrStopBackend(): Promise<void> {
     clearInterval(heartbeatTimer)
     heartbeatTimer = null
   }
+  if (viewerPollTimer) {
+    clearInterval(viewerPollTimer)
+    viewerPollTimer = null
+  }
   if (!backendToken || !backendPort) return
 
   const res = await backendHttpJson(backendPort, backendToken, 'POST', '/api/client/detach', undefined, 1500)
@@ -529,6 +552,52 @@ app.whenReady().then(async () => {
       void backendHttpJson(backendPort, backendToken, 'POST', '/api/client/heartbeat')
     }
   }, 15000)
+
+  const writeDesktopLaunchMetadata = (): void => {
+    const appDir = path.resolve(__dirname, '..')
+    writeJsonAtomicPrivate(path.join(getDataDir(), 'desktop-launch.json'), {
+      command: process.execPath,
+      args: app.isPackaged ? [] : [appDir],
+      cwd: app.isPackaged ? path.dirname(process.execPath) : appDir,
+    })
+  }
+  writeDesktopLaunchMetadata()
+
+  const pollViewerRequest = async (): Promise<void> => {
+    if (!backendToken || !backendPort) return
+    const pol = loadPolicy()
+    if (!pol.mcp_enabled || !pol.allow_viewer_open) return
+    const res = await backendHttpJson(backendPort, backendToken, 'GET', '/api/client/viewer/pending', undefined, 1500)
+    const rawReq = res.status === 200 ? res.data?.['request'] : null
+    if (
+      rawReq &&
+      typeof rawReq === 'object' &&
+      Array.isArray((rawReq as McpViewerRequest).paths) &&
+      (rawReq as McpViewerRequest).paths.length > 0
+    ) {
+      const req = rawReq as McpViewerRequest
+      pendingViewerRequest = req
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
+        mainWindow.focus()
+        mainWindow.webContents.send('mcp:open-viewer', req)
+      }
+    }
+  }
+
+  viewerPollTimer = setInterval(() => {
+    void pollViewerRequest()
+  }, 1000)
+
+  ipcMain.handle('mcp:consumePendingViewer', async () => {
+    if (!pendingViewerRequest) {
+      await pollViewerRequest()
+    }
+    const next = pendingViewerRequest
+    pendingViewerRequest = null
+    return next
+  })
 
   ipcMain.handle('getBackendPort', () => backendPort)
   ipcMain.handle('getBackendConfig', () => ({ port: backendPort, token: backendToken }))

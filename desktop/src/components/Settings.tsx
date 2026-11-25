@@ -231,14 +231,69 @@ export const Settings = () => {
                   />
                 </div>
 
-                <div className="border-t border-border pt-4">
-                  <ToggleRow
-                    title="Allow Visual Previews"
-                    description="Allow agents to view downscaled EXIF-stripped JPEG previews of indexed photos."
-                    enabled={policy.allow_previews}
-                    disabled={!policy.mcp_enabled}
-                    onToggle={() => void updatePolicy({ allow_previews: !policy.allow_previews })}
-                  />
+                <div className="border-t border-border pt-4 space-y-3">
+                  <div>
+                    <h3 className="text-text font-medium text-sm">Preview & Viewing Options</h3>
+                    <p className="text-xs text-text-mute mt-0.5">
+                      Choose whether agents display matching photos privately in SnapSort or inspect image pixels directly.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-surface-hi border border-border space-y-3">
+                    <p className="text-[11px] font-medium text-text-dim">Option 1 · SnapSort Minimal Viewer (Private)</p>
+                    <ToggleRow
+                      title="Allow Opening Minimal Viewer"
+                      description="Let agents open search results in SnapSort's minimal viewer without sending pixels to the AI."
+                      enabled={policy.allow_viewer_open}
+                      disabled={!policy.mcp_enabled}
+                      onToggle={() => void updatePolicy({ allow_viewer_open: !policy.allow_viewer_open })}
+                    />
+                    <div className="border-t border-border pt-3">
+                      <ToggleRow
+                        title="Allow Starting SnapSort When Closed"
+                        description="Let agents launch SnapSort to show photos when you confirm."
+                        enabled={policy.allow_launch_desktop}
+                        disabled={!policy.mcp_enabled || !policy.allow_viewer_open}
+                        onToggle={() => void updatePolicy({ allow_launch_desktop: !policy.allow_launch_desktop })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-surface-hi border border-border space-y-3">
+                    <p className="text-[11px] font-medium text-text-dim">Option 2 · AI Image Access (Sends Pixels to AI)</p>
+                    <ToggleRow
+                      title="Allow AI Image Inspection"
+                      description="Allow agents to inspect downscaled EXIF-stripped previews only after you confirm in chat."
+                      enabled={policy.allow_previews}
+                      disabled={!policy.mcp_enabled}
+                      onToggle={() => void updatePolicy({ allow_previews: !policy.allow_previews })}
+                    />
+                    {policy.allow_previews && (
+                      <div className="border-t border-border pt-3 flex items-center justify-between gap-4">
+                        <div>
+                          <label htmlFor="max-preview-select" className="text-text font-medium text-xs">
+                            Max images per burst
+                          </label>
+                          <p className="text-[11px] text-text-mute mt-0.5">
+                            Caps how many photos an agent can inspect per minute.
+                          </p>
+                        </div>
+                        <select
+                          id="max-preview-select"
+                          value={policy.max_preview_images}
+                          disabled={!policy.mcp_enabled}
+                          onChange={(e) => void updatePolicy({ max_preview_images: Number(e.target.value) })}
+                          className="bg-surface border border-border rounded-md px-2.5 py-1 text-xs text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        >
+                          {[1, 2, 3, 5, 8, 10].map((n) => (
+                            <option key={n} value={n}>
+                              {n} {n === 1 ? 'image' : 'images'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="border-t border-border pt-4">

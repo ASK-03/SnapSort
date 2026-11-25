@@ -3,9 +3,18 @@ export interface McpPolicy {
   mcp_enabled: boolean;
   headless_enabled: boolean;
   allow_agent_scan: boolean;
+  allow_viewer_open: boolean;
+  allow_launch_desktop: boolean;
   allow_previews: boolean;
+  max_preview_images: number;
   max_headless_scan_images: number;
   approved_roots: string[];
+}
+
+export interface McpViewerRequest {
+  id: string;
+  paths: string[];
+  query?: string | null;
 }
 
 export interface McpAuditEntry {
@@ -63,6 +72,8 @@ declare global {
       }>;
       getMcpAuditLog(): Promise<McpAuditEntry[]>;
       stopMcpHeadless(): Promise<McpPolicy>;
+      onMcpOpenViewer(cb: (req: McpViewerRequest) => void): () => void;
+      consumePendingMcpViewer(): Promise<McpViewerRequest | null>;
       setWindowTheme(theme: 'light' | 'dark' | 'viewer' | 'viewerLight'): void;
       minimizeWindow(): void;
       toggleMaximizeWindow(): void;
