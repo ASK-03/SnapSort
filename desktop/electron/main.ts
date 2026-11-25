@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawn, execFile, ChildProcess } from 'child_process'
@@ -107,29 +107,54 @@ function stopPythonBackend() {
   }
 }
 
-// Use opaque surfaces: on Linux a transparent overlay can inherit the system
-// titlebar color even when SnapSort is using the opposite theme.
-const titleBarColors = {
-  light: { color: '#F5F4F1', symbolColor: '#484B50' },
-  dark: { color: '#202124', symbolColor: '#DDDFE3' },
-  viewer: { color: '#0A0B0C', symbolColor: '#ECEDEE' },
+type WindowTheme = 'light' | 'dark' | 'viewer' | 'viewerLight'
+
+const windowBgColors: Record<WindowTheme, string> = {
+  light: '#FAF9F6',
+  dark: '#141517',
+  viewer: '#0A0B0C',
+  viewerLight: '#F6F5F1',
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    backgroundColor: '#141517',
+    backgroundColor: windowBgColors.dark,
     titleBarStyle: 'hidden',
-    titleBarOverlay: process.platform === 'darwin'
-      ? true
-      : { height: 39, ...titleBarColors.dark },
-    ...(process.platform === 'darwin' && { trafficLightPosition: { x: 12, y: 13 } }),
+    ...(process.platform === 'darwin' && {
+      titleBarOverlay: true,
+      trafficLightPosition: { x: 12, y: 14 },
+    }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
   if (process.platform !== 'darwin') mainWindow.setMenuBarVisibility(false)
+
+  const emitMaximized = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('window:maximized-changed', mainWindow.isMaximized())
+  }
+  mainWindow.on('maximize', emitMaximized)
+  mainWindow.on('unmaximize', emitMaximized)
+  mainWindow.on('enter-full-screen', emitMaximized)
+  mainWindow.on('leave-full-screen', emitMaximized)
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const isLocal = url.startsWith('file://') || (VITE_DEV_SERVER_URL && url.startsWith(VITE_DEV_SERVER_URL))
+    if (!isLocal && /^https?:\/\//i.test(url)) {
+      event.preventDefault()
+      void shell.openExternal(url)
+    }
+  })
 
   if (VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL)
@@ -172,11 +197,33 @@ app.whenReady().then(async () => {
   // Expose the dynamic backend port to the frontend
   ipcMain.handle('getBackendPort', () => backendPort)
 
-  ipcMain.on('window:set-control-theme', (event, theme: keyof typeof titleBarColors) => {
-    if (process.platform !== 'darwin' && mainWindow && event.sender === mainWindow.webContents && Object.hasOwn(titleBarColors, theme)) {
-      mainWindow.setTitleBarOverlay(titleBarColors[theme])
+  ipcMain.on('window:set-control-theme', (event, theme: WindowTheme) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || !Object.hasOwn(windowBgColors, theme)) return
+    mainWindow.setBackgroundColor(windowBgColors[theme])
+  })
+
+  ipcMain.on('window:minimize', (event) => {
+    if (mainWindow && event.sender === mainWindow.webContents) {
+      mainWindow.minimize()
     }
   })
+
+  ipcMain.on('window:toggle-maximize', (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+    } else {
+      mainWindow.maximize()
+    }
+  })
+
+  ipcMain.on('window:close', (event) => {
+    if (mainWindow && event.sender === mainWindow.webContents) {
+      mainWindow.close()
+    }
+  })
+
+  ipcMain.handle('window:is-maximized', () => Boolean(mainWindow?.isMaximized()))
 
   ipcMain.on('window:show-menu', (event, x: number, y: number) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return

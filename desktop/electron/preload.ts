@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  setWindowTheme: (theme: 'light' | 'dark' | 'viewer') => ipcRenderer.send('window:set-control-theme', theme),
+  setWindowTheme: (theme: 'light' | 'dark' | 'viewer' | 'viewerLight') => ipcRenderer.send('window:set-control-theme', theme),
+  minimizeWindow: () => ipcRenderer.send('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.send('window:toggle-maximize'),
+  closeWindow: () => ipcRenderer.send('window:close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+  onWindowMaximizedChange: (cb: (maximized: boolean) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, val: boolean) => cb(val)
+    ipcRenderer.on('window:maximized-changed', handler)
+    return () => ipcRenderer.removeListener('window:maximized-changed', handler)
+  },
   showApplicationMenu: (x: number, y: number) => ipcRenderer.send('window:show-menu', x, y),
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   getBackendPort: () => ipcRenderer.invoke('getBackendPort')

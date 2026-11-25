@@ -88,7 +88,7 @@ class SearchEngine:
         return _PENALTY   # name given, none found
 
     # ------------------------------------------------------------------
-    def search(self, query: str, top_k: int = 20, min_score: float = 0.18) -> list[tuple[str, float]]:
+    def search(self, query: str, top_k: int = 20, min_score: float = 0.25) -> list[tuple[str, float]]:
         """
         Full semantic search + reranking.
         Returns [(image_path, score), ...] sorted by descending score.
@@ -122,9 +122,7 @@ class SearchEngine:
                 
             bonus = self._face_bonus(image_id, name_to_fids) if names_found else 0.0
             final_score = clip_score + bonus
-            
-            # If penalized heavily (e.g. specific person requested but not found), skip
-            if final_score < 0.15:
+            if names_found and final_score < 0.21:
                 continue
                 
             path  = self.db.get_image_path(image_id)

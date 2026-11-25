@@ -6,40 +6,152 @@
   --ss-titlebar: #F5F4F1;
   --ss-bg: #FAF9F6;
   --ss-surface: #FFFFFF;
-  --ss-surface-hi: #F3F1ED;
-  --ss-border: #E4E1DA;
+  --ss-surface-hi: #F0EEE9;
+  --ss-border: #E2DFD7;
   --ss-accent: #2563EB;
+  --ss-accent-soft: rgba(37, 99, 235, 0.12);
+  --ss-on-accent: #FFFFFF;
   --ss-text: #1A1A1A;
-  --ss-text-dim: #6B6E74;
-  --ss-text-mute: #9A9DA3;
-  --ss-success: #3F9A6C;
+  --ss-text-dim: #575A61;
+  --ss-text-mute: #5E6168;
+  --ss-success: #2E855A;
+  --ss-danger: #C62828;
+  --ss-on-danger: #FFFFFF;
+  --ss-img-outline: oklch(0 0 0 / 0.1);
+  --ss-topbar-glass: rgba(245, 244, 241, 0.84);
+
+  --ss-viewer-bg: #F6F5F1;
+  --ss-viewer-header: #FFFFFF;
+  --ss-viewer-panel: #FFFFFF;
+  --ss-viewer-control: rgba(26, 26, 26, 0.06);
+  --ss-viewer-control-hover: rgba(26, 26, 26, 0.12);
+  --ss-viewer-track: rgba(26, 26, 26, 0.14);
+  --ss-viewer-tick: rgba(26, 26, 26, 0.42);
+  --ss-viewer-tab-active: #FFFFFF;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --window-left: env(titlebar-area-x, 0px);
+  --window-right: max(0px, calc(100vw - var(--window-left) - env(titlebar-area-width, 100vw)));
+  --window-height: max(44px, env(titlebar-area-height, 0px));
 }
 
 .dark {
-  --ss-titlebar: #202124;
+  --ss-titlebar: #1E1F22;
   --ss-bg: #141517;
   --ss-surface: #1A1B1E;
-  --ss-surface-hi: #1E2023;
-  --ss-border: #2C2E32;
-  --ss-accent: #3B82F6;
+  --ss-surface-hi: #232529;
+  --ss-border: #2C2E33;
+  --ss-accent: #2E6FF2;
+  --ss-accent-soft: rgba(46, 111, 242, 0.18);
+  --ss-on-accent: #FFFFFF;
   --ss-text: #ECEDEE;
-  --ss-text-dim: #9A9DA3;
-  --ss-text-mute: #75787E;
-  --ss-success: #6FBF8B;
+  --ss-text-dim: #B2B6BD;
+  --ss-text-mute: #93979E;
+  --ss-success: #5EBF80;
+  --ss-danger: #F87171;
+  --ss-on-danger: #FFFFFF;
+  --ss-img-outline: oklch(1 0 0 / 0.1);
+  --ss-topbar-glass: rgba(30, 31, 34, 0.84);
+
+  --ss-viewer-bg: #0A0B0C;
+  --ss-viewer-header: #0D0E10;
+  --ss-viewer-panel: #15161A;
+  --ss-viewer-control: rgba(255, 255, 255, 0.08);
+  --ss-viewer-control-hover: rgba(255, 255, 255, 0.16);
+  --ss-viewer-track: rgba(255, 255, 255, 0.14);
+  --ss-viewer-tick: rgba(255, 255, 255, 0.45);
+  --ss-viewer-tab-active: #232529;
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-bg text-text antialiased;
   }
 }
 
-/* Electron supplies these insets for the platform's native window buttons. */
-:root {
-  --window-left: env(titlebar-area-x, 0px);
-  --window-right: max(0px, calc(100vw - var(--window-left) - env(titlebar-area-width, 100vw)));
-  --window-height: max(40px, env(titlebar-area-height, 0px));
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+  animation-duration: 0ms !important;
 }
+
+/* Interactive feedback & framing utilities */
+.pressable {
+  transition: scale 140ms var(--ease-out),
+              background-color 150ms ease,
+              color 150ms ease,
+              border-color 150ms ease,
+              opacity 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pressable:not(:disabled):active {
+  scale: 0.96;
+}
+
+.tile-pressable {
+  transition: scale 140ms var(--ease-out),
+              box-shadow 150ms ease,
+              border-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.tile-pressable:not(:disabled):active {
+  scale: 0.985;
+}
+
+.img-frame-outline {
+  position: relative;
+}
+.img-frame-outline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--ss-img-outline);
+  pointer-events: none;
+}
+
+.hover-zoom-img {
+  transition: transform 200ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .group:hover .hover-zoom-img {
+    transform: scale(1.02);
+  }
+}
+
+.reveal-soft {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
+}
+@starting-style {
+  .reveal-soft {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes save-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.save-dropdown {
+  animation: save-popover-in 170ms var(--ease-out) both;
+}
+
+/* Electron frameless toolbar */
 .window-drag {
   app-region: drag;
   user-select: none;
@@ -53,17 +165,19 @@
   align-items: center;
   flex-shrink: 0;
   height: var(--window-height);
-  background: var(--ss-titlebar);
+  background: var(--ss-topbar-glass);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   border-bottom: 1px solid var(--ss-border);
 }
 .window-leading {
-  padding-left: calc(8px + var(--window-left));
+  padding-left: calc(16px + var(--window-left));
 }
 .window-brand {
   @apply inline-flex h-7 items-center gap-2 rounded-md px-2 text-[13px] font-semibold tracking-tight text-text;
 }
 .window-search {
-  @apply flex h-7 min-w-0 items-center rounded-md border border-border bg-surface text-text-dim;
+  @apply flex h-7 min-w-0 items-center rounded-lg border border-border bg-surface text-text-dim;
 }
 .window-search:focus-within {
   border-color: var(--ss-accent);
@@ -72,27 +186,24 @@
   flex-shrink: 0;
 }
 .window-search input {
-  @apply min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-text-dim;
+  @apply min-w-0 flex-1 bg-transparent text-[13px] text-text outline-none placeholder:text-text-mute;
   user-select: text;
 }
 .window-search kbd {
-  @apply rounded border border-border px-1 font-sans text-[10px] leading-4;
+  @apply rounded border border-border bg-bg px-1.5 py-0.5 font-sans text-[12px] leading-none text-text-mute;
 }
 .window-actions {
   justify-self: end;
-  margin-right: calc(8px + var(--window-right));
-  padding-right: min(8px, var(--window-right));
-  border-right: min(1px, var(--window-right)) solid var(--ss-border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 12px;
 }
 .window-actions button {
   @apply grid h-7 w-7 place-items-center rounded-md text-text-dim;
 }
-.viewer-window-toolbar {
-  left: var(--window-left);
-  right: var(--window-right);
-}
 .window-tool {
-  @apply hover:bg-border hover:text-text active:bg-surface-hi focus-visible:outline-accent;
+  @apply hover:bg-surface-hi hover:text-text active:bg-surface-hi focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent;
 }
 @media (max-width: 600px) {
   .window-toolbar {
@@ -114,94 +225,179 @@
 }
 ::-webkit-scrollbar-thumb {
   background: var(--ss-border);
-  border: 2px solid transparent;
   border-radius: 5px;
-  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ss-text-mute);
 }
 
-/* The transparent part of the native scrollbar keeps the last column clear
-   and gives the slim visible thumb a generous drag target. */
-.photo-grid-scroll [data-virtuoso-scroller], .card-grid-scroll {
+.search-results-grid [data-virtuoso-scroller] {
   scrollbar-gutter: stable;
 }
-.photo-grid-scroll [data-virtuoso-scroller]::-webkit-scrollbar:vertical,
-.card-grid-scroll::-webkit-scrollbar:vertical {
+.search-results-grid [data-virtuoso-scroller]::-webkit-scrollbar:vertical {
   width: 36px;
 }
-.photo-grid-scroll [data-virtuoso-scroller]::-webkit-scrollbar-thumb:vertical,
-.card-grid-scroll::-webkit-scrollbar-thumb:vertical {
+.search-results-grid [data-virtuoso-scroller]::-webkit-scrollbar-thumb:vertical {
   border-left: 27px solid transparent;
   border-right: 4px solid transparent;
   border-radius: 30px 7px 7px 30px / 3px;
   background-clip: padding-box;
 }
 
-/* Apple-style cinematic timing for every view transition (Viewer open/close,
-   prev/next crossfade), so the browser's default matches the rest of the
-   app's motion instead of its ~150ms default. Named transitions below
-   override this per-element where a plain crossfade isn't premium enough. */
+/* View Transitions: asymmetric open/close & snappy crossfades */
 ::view-transition-group(*) {
-  animation-duration: 320ms;
-  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  animation-duration: 240ms;
+  animation-timing-function: var(--ease-drawer);
 }
 ::view-transition-old(*),
 ::view-transition-new(*) {
-  animation-duration: 320ms;
-  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  animation-duration: 240ms;
+  animation-timing-function: var(--ease-drawer);
 }
 
-/* Viewer open/close: scale + fade (like a Quick Look panel). The
-   `lightbox-root` element also PERSISTS across prev/next navigation (same
-   node, not remounted), and the browser generates an old+new snapshot pair
-   for a persisting named element too — so without `:only-child` here, this
-   entrance/exit animation was replaying on every single nav (the backdrop
-   briefly fading toward the grid and back), not just on true open/close.
-   `:only-child` is true only when there's no snapshot on the other side —
-   i.e. genuinely entering (nothing existed before) or exiting (nothing
-   exists after) — which is exactly open/close and never a plain nav. */
 @keyframes lightbox-in {
-  from { opacity: 0; transform: scale(0.97); }
+  from { opacity: 0; transform: scale(0.98); }
   to { opacity: 1; transform: scale(1); }
 }
 @keyframes lightbox-out {
   from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.97); }
+  to { opacity: 0; transform: scale(0.99); }
 }
 ::view-transition-new(lightbox-root):only-child {
-  animation: lightbox-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: lightbox-in 260ms var(--ease-drawer) both;
 }
 ::view-transition-old(lightbox-root):only-child {
-  animation: lightbox-out 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: lightbox-out 160ms var(--ease-out) both;
 }
-/* Nav (both old and new exist): the backdrop/top bar didn't actually
-   change, so it shouldn't animate at all — only the named `viewer-image`
-   group should. */
 ::view-transition-old(lightbox-root):not(:only-child),
 ::view-transition-new(lightbox-root):not(:only-child) {
   animation: none;
 }
 
-/* The photo itself: fade + a subtle scale on the incoming layer only.
-   `::view-transition-new` always paints ON TOP of `::view-transition-old` —
-   so the top (new) layer must never be smaller than the bottom (old) layer
-   at any frame, or the old photo's edges peek out from underneath for the
-   whole crossfade (looked like the previous photo "flashing in the back").
-   Old stays fixed size and just fades; new grows in from slightly smaller
-   to 1, always covering old's footprint as it fades in over it. */
 @keyframes viewer-image-out {
   from { opacity: 1; }
   to { opacity: 0; }
 }
 @keyframes viewer-image-in {
-  from { opacity: 0; transform: scale(0.98); }
+  from { opacity: 0; transform: scale(0.99); }
   to { opacity: 1; transform: scale(1); }
 }
 ::view-transition-old(viewer-image) {
-  animation: viewer-image-out 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: viewer-image-out 160ms var(--ease-out) both;
 }
 ::view-transition-new(viewer-image) {
-  animation: viewer-image-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: viewer-image-in 180ms var(--ease-out) both;
+}
+
+::view-transition-group(person-avatar),
+::view-transition-image-pair(person-avatar),
+::view-transition-old(person-avatar),
+::view-transition-new(person-avatar) {
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+/* Startup splash choreography matching light-tour logo assembly */
+@keyframes ss-splash-blue {
+  from { opacity: 0; transform: translate(-70px, 70px) rotate(-14deg) scale(0.45); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-orange {
+  from { opacity: 0; transform: translate(22px, 22px) rotate(-20deg) scale(0.32); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-amber {
+  from { opacity: 0; transform: translate(-22px, -22px) rotate(20deg) scale(0.32); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-coral {
+  from { opacity: 0; transform: translate(-70px, -70px) rotate(-26deg) scale(0.45); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes ss-splash-green {
+  0% { opacity: 0; transform: translate(0, -56px) scale(0.2); }
+  70% { opacity: 1; transform: translate(0, 3px) scale(1.06); }
+  100% { opacity: 1; transform: translate(0, 0) scale(1); }
+}
+@keyframes ss-splash-impact {
+  0% { transform: scale(0.92); }
+  55% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes ss-splash-word {
+  from { opacity: 0; max-width: 0px; transform: translateX(-24px); }
+  to { opacity: 1; max-width: 260px; transform: translateX(0); }
+}
+
+.ss-splash-mark {
+  animation: ss-splash-impact 700ms var(--ease-out) 220ms both;
+}
+.ss-splash-blue {
+  transform-origin: 112px 226px;
+  animation: ss-splash-blue 550ms var(--ease-drawer) 120ms both;
+}
+.ss-splash-orange {
+  transform-origin: 227px 111px;
+  animation: ss-splash-orange 550ms var(--ease-drawer) 200ms both;
+}
+.ss-splash-amber {
+  transform-origin: 227px 111px;
+  animation: ss-splash-amber 550ms var(--ease-drawer) 265ms both;
+}
+.ss-splash-coral {
+  transform-origin: 100px 91px;
+  animation: ss-splash-coral 550ms var(--ease-drawer) 345ms both;
+}
+.ss-splash-green {
+  transform-origin: 241.5px 247.5px;
+  animation: ss-splash-green 620ms cubic-bezier(0.34, 1.45, 0.64, 1) 435ms both;
+}
+.ss-splash-word {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: ss-splash-word 650ms var(--ease-out) 565ms both;
+}
+
+/* Accessibility: Reduced motion & transparency */
+@media (prefers-reduced-motion: reduce) {
+  .ss-splash-mark,
+  .ss-splash-blue,
+  .ss-splash-orange,
+  .ss-splash-amber,
+  .ss-splash-coral,
+  .ss-splash-green,
+  .ss-splash-word {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    max-width: none !important;
+  }
+  .reveal-soft,
+  .save-dropdown {
+    transform: none !important;
+    transition-property: opacity !important;
+    transition-duration: 120ms !important;
+    animation-duration: 120ms !important;
+  }
+  .group:hover .hover-zoom-img {
+    transform: none !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-new(lightbox-root):only-child,
+  ::view-transition-old(lightbox-root):only-child,
+  ::view-transition-old(viewer-image),
+  ::view-transition-new(viewer-image) {
+    animation-duration: 150ms !important;
+    transform: none !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .window-toolbar {
+    background: var(--ss-titlebar);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
