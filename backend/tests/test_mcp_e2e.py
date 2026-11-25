@@ -360,10 +360,14 @@ class TestFastApiSecurityAndEndpoints(unittest.TestCase):
         )
         self.assertEqual(r_ok.status_code, 200)
         d_ok = r_ok.json()
+        self.assertEqual(d_ok["query"], "beach")
         self.assertEqual(d_ok["status"], "ok")
-        self.assertEqual(d_ok["resolved_person_id"], 3)
-        self.assertEqual(d_ok["person_photo_count"], 1)
+        self.assertEqual(d_ok["returned"], 1)
+        self.assertEqual(d_ok["total_matches"], 1)
+        self.assertFalse(d_ok["has_more"])
         self.assertEqual(d_ok["results"][0]["path"], img1)
+        for internal_key in ("resolved_person_id", "person_photo_count", "min_score_used", "clip_indexed_photos", "highest_below_threshold"):
+            self.assertNotIn(internal_key, d_ok)
 
         r_dup = self.client.get(
             "/api/search",
@@ -390,6 +394,49 @@ class TestFastApiSecurityAndEndpoints(unittest.TestCase):
         self.assertEqual(job["new_images"], 1)
         if job.get("scan_id"):
             ctrl.wait_for_job(job["scan_id"], 15.0)
+
+    def test_search_pagination_topk_and_offset(self):
+        paths = []
+        for idx in range(4):
+            p = os.path.join(self.approved_dir, f"page_{idx}.jpg")
+            make_jpeg(p)
+            paths.append(p)
+
+        ctrl = api.controller()
+        ctrl._clip_proc = StubClipProcessor()
+        vec = np.zeros(512, dtype="float32")
+        vec[0] = 1.0
+        for p in paths:
+            img_id = ctrl.db.insert_image(p)
+            ctrl.clip_index.add(img_id, vec)
+            ctrl.db.mark_clip_indexed(img_id)
+
+        r_p1 = self.client.get(
+            "/api/search",
+            params={"q": "beach", "limit": 2, "offset": 0, "include_meta": "true"},
+            headers=self._auth(),
+        )
+        self.assertEqual(r_p1.status_code, 200)
+        d1 = r_p1.json()
+        self.assertEqual(d1["query"], "beach")
+        self.assertEqual(d1["returned"], 2)
+        self.assertEqual(d1["total_matches"], 4)
+        self.assertTrue(d1["has_more"])
+
+        r_p2 = self.client.get(
+            "/api/search",
+            params={"q": "beach", "limit": 2, "offset": 2, "include_meta": "true"},
+            headers=self._auth(),
+        )
+        self.assertEqual(r_p2.status_code, 200)
+        d2 = r_p2.json()
+        self.assertEqual(d2["returned"], 2)
+        self.assertEqual(d2["total_matches"], 4)
+        self.assertFalse(d2["has_more"])
+        p1_paths = {item["path"] for item in d1["results"]}
+        p2_paths = {item["path"] for item in d2["results"]}
+        self.assertEqual(len(p1_paths & p2_paths), 0)
+        self.assertEqual(p1_paths | p2_paths, set(paths))
 
 
 class TestStdioMcpSubprocessHeadless(unittest.TestCase):
@@ -418,31 +465,31 @@ class TestStdioMcpSubprocessHeadless(unittest.TestCase):
             result = init_resp["result"]
             self.assertEqual(result["serverInfo"]["name"], "snapsort-mcp")
             instructions = result.get("instructions", "")
-            self.assertIn("list_people", instructions)
-            self.assertIn("list_approved_folders", instructions)
+            self.assertIn("get_library_overview", instructions)
+            self.assertIn("open_in_viewer", instructions)
             self.assertIn("user_confirmed_preview", instructions)
             self.assertIn("local file-reading", instructions)
 
             tools = client.list_tools()
-            self.assertEqual(len(tools), 10)
+            self.assertEqual(len(tools), 9)
             tools_by_name = {t["name"]: t for t in tools}
             for name, tool in tools_by_name.items():
                 ann = tool.get("annotations")
                 self.assertIsInstance(ann, dict, f"Missing annotations on {name}")
                 self.assertFalse(ann["destructiveHint"])
-                if name == "scan_folder":
+                if name in ("scan_folder", "open_in_viewer"):
                     self.assertFalse(ann["readOnlyHint"])
                 else:
                     self.assertTrue(ann["readOnlyHint"])
 
             # Disabled MCP -> actionable error, adapter stays alive
-            r_dis = client.call_tool("get_library_stats")
+            r_dis = client.call_tool("get_library_overview")
             self.assertTrue(r_dis["isError"])
             self.assertIn("disabled", r_dis["content"][0]["text"].lower())
 
             # MCP enabled, headless disabled -> Open SnapSort message, stays alive
             save_policy(self.data_dir, {"mcp_enabled": True, "headless_enabled": False})
-            r_closed = client.call_tool("get_library_stats")
+            r_closed = client.call_tool("get_library_overview")
             self.assertTrue(r_closed["isError"])
             self.assertIn("Open SnapSort", r_closed["content"][0]["text"])
 
@@ -474,12 +521,32 @@ class TestStdioMcpSubprocessHeadless(unittest.TestCase):
             self.assertEqual(scan_data["status"], "completed")
             self.assertEqual(scan_data["total_images"], 1)
 
+            r_overview = client.call_tool("get_library_overview")
+            self.assertFalse(r_overview["isError"], r_overview)
+            ov = json.loads(r_overview["content"][0]["text"])
+            self.assertEqual(ov["status"], "ok")
+            self.assertEqual(ov["stats"]["photos"], 1)
+            self.assertIn("capabilities", ov)
+
             r_folder_imgs = client.call_tool("list_folder_images", {"folder": self.approved_dir})
             folder_imgs = json.loads(r_folder_imgs["content"][0]["text"])["images"]
             self.assertEqual(folder_imgs, [os.path.realpath(self.photo_path)])
 
             r_search = client.call_tool("search_images", {"query": "sunset", "folder": self.approved_dir})
             self.assertFalse(r_search["isError"])
+            s_data = json.loads(r_search["content"][0]["text"])
+            self.assertEqual(list(s_data.keys())[0], "query")
+            self.assertEqual(s_data["query"], "sunset")
+            self.assertIn("preview_options", s_data)
+
+            r_viewer_closed = client.call_tool(
+                "open_in_viewer",
+                {"paths": [self.photo_path], "query": "sunset"},
+            )
+            self.assertFalse(r_viewer_closed["isError"], r_viewer_closed)
+            v_closed = json.loads(r_viewer_closed["content"][0]["text"])
+            self.assertEqual(v_closed["status"], "app_not_running")
+            self.assertIn("hint", v_closed)
 
             r_prev = client.call_tool(
                 "get_image_preview",
@@ -506,6 +573,23 @@ class TestStdioMcpSubprocessHeadless(unittest.TestCase):
                 {"desktop_pid": os.getpid()},
             )
             self.assertEqual(attach_resp["mode"], "desktop")
+
+            r_viewer_open = client.call_tool(
+                "open_in_viewer",
+                {"paths": [self.photo_path], "query": "sunset"},
+            )
+            self.assertFalse(r_viewer_open["isError"], r_viewer_open)
+            v_open = json.loads(r_viewer_open["content"][0]["text"])
+            self.assertEqual(v_open["status"], "opened")
+            st_pend, pending_payload = http_json(
+                int(info["port"]),
+                str(info["token"]),
+                "GET",
+                "/api/client/viewer/pending",
+            )
+            self.assertEqual(st_pend, 200)
+            self.assertEqual(pending_payload["request"]["paths"], [os.path.realpath(self.photo_path)])
+            self.assertEqual(pending_payload["request"]["query"], "sunset")
 
             _, detach_resp = http_json(int(info["port"]), str(info["token"]), "POST", "/api/client/detach")
             self.assertIn(detach_resp["action"], ("continuing_headless", "shutting_down"))

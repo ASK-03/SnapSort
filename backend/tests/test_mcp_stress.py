@@ -96,9 +96,8 @@ class TestMcpStressAndLifecycle(unittest.TestCase):
                     client.initialize()
                     barrier.wait(timeout=10)
                     calls = [
-                        ("get_library_stats", {}),
-                        ("list_people", {"limit": 10, "offset": 0}),
-                        ("list_approved_folders", {}),
+                        ("get_library_overview", {}),
+                        ("get_library_overview", {"name_filter": "a", "people_limit": 10, "people_offset": 0}),
                         ("list_folder_images", {"folder": self.approved_dir, "limit": 10}),
                         ("search_images", {"query": f"blue sky {worker_idx}", "folder": self.approved_dir, "top_k": 4}),
                     ]
@@ -270,8 +269,8 @@ class TestMcpStressAndLifecycle(unittest.TestCase):
                 )["job"]
             self.assertEqual(j2["status"], "completed")
 
-            stats = json.loads(client.call_tool("get_library_stats")["content"][0]["text"])
-            self.assertEqual(stats["photos"], 1)
+            ov = json.loads(client.call_tool("get_library_overview")["content"][0]["text"])
+            self.assertEqual(ov["stats"]["photos"], 1)
 
         shutdown_backend_from_runtime(self.data_dir)
         cidx = CLIPIndex(os.path.join(self.data_dir, "clip.index"))
@@ -300,14 +299,14 @@ class TestMcpStressAndLifecycle(unittest.TestCase):
             self.assertEqual(job["status"], "failed")
             self.assertIn("exceeding", job["error"].lower())
 
-            stats = json.loads(client.call_tool("get_library_stats")["content"][0]["text"])
-            self.assertEqual(stats["photos"], 0)
+            ov = json.loads(client.call_tool("get_library_overview")["content"][0]["text"])
+            self.assertEqual(ov["stats"]["photos"], 0)
 
     def test_idle_auto_shutdown_and_zero_orphans(self):
         save_policy(self.data_dir, {"mcp_enabled": True, "headless_enabled": True})
         with StdioMcpClient(self.data_dir, MODELS_DIR, idle_timeout=3) as client:
             client.initialize()
-            res = client.call_tool("get_library_stats")
+            res = client.call_tool("get_library_overview")
             self.assertFalse(res["isError"])
             info = read_runtime_info(self.data_dir)
             self.assertIsNotNone(info)
@@ -378,8 +377,8 @@ class TestMcpStressAndLifecycle(unittest.TestCase):
             self.assertTrue(unknown_tool["isError"])
 
             # Out-of-range limits clamped safely without error
-            r_people = client.call_tool("list_people", {"limit": 500, "offset": 0})
-            self.assertFalse(r_people["isError"])
+            r_overview = client.call_tool("get_library_overview", {"people_limit": 500, "people_offset": 0})
+            self.assertFalse(r_overview["isError"])
 
             r_search = client.call_tool("search_images", {"query": "sunset", "top_k": 999})
             self.assertFalse(r_search["isError"])

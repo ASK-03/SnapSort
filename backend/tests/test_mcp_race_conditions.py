@@ -71,7 +71,7 @@ class TestMcpRaceConditions(unittest.TestCase):
                 with StdioMcpClient(self.data_dir, MODELS_DIR, idle_timeout=60) as client:
                     client.initialize()
                     barrier.wait(timeout=10)
-                    res = client.call_tool("get_library_stats")
+                    res = client.call_tool("get_library_overview")
                     with lock:
                         results.append(res)
             except Exception as exc:
@@ -89,7 +89,7 @@ class TestMcpRaceConditions(unittest.TestCase):
         for res in results:
             self.assertFalse(res["isError"], res)
             payload = json.loads(res["content"][0]["text"])
-            self.assertEqual(payload["photos"], 0)
+            self.assertEqual(payload["stats"]["photos"], 0)
 
         info = read_runtime_info(self.data_dir)
         self.assertIsNotNone(info)
@@ -197,9 +197,9 @@ class TestMcpRaceConditions(unittest.TestCase):
 
             self.assertEqual(reader_errors, [])
             self.assertEqual(scan_data["status"], "completed")
-            stats_res = json.loads(client.call_tool("get_library_stats")["content"][0]["text"])
-            self.assertEqual(stats_res["photos"], 30)
-            self.assertFalse(stats_res["indexing_in_progress"])
+            ov_res = json.loads(client.call_tool("get_library_overview")["content"][0]["text"])
+            self.assertEqual(ov_res["stats"]["photos"], 30)
+            self.assertFalse(ov_res["stats"]["indexing_in_progress"])
 
     def test_concurrent_scan_deduplication_and_serialized_queue(self):
         dir_a = os.path.join(self.approved_dir, "trip_a")
@@ -302,7 +302,7 @@ class TestMcpRaceConditions(unittest.TestCase):
                     headers=headers,
                 )
                 self.assertEqual(r_search.status_code, 200)
-                self.assertEqual(r_search.json()["resolved_person_id"], 10)
+                self.assertEqual(r_search.json()["query"], "photo")
 
                 # Simulated subsequent scan encountering stale FAISS cluster 11
                 ctrl.db.insert_occurrences_batch([(p3, 11, (0, 0, 10, 10))])
@@ -396,7 +396,7 @@ class TestMcpRaceConditions(unittest.TestCase):
         with StdioMcpClient(self.data_dir, MODELS_DIR, idle_timeout=60) as client:
             client.initialize()
             adapter_pid = client.proc.pid
-            r1 = client.call_tool("get_library_stats")
+            r1 = client.call_tool("get_library_overview")
             self.assertFalse(r1["isError"], r1)
 
             # Stop backend 1, then start backend 2 on a new port/token/instance_id
@@ -414,7 +414,7 @@ class TestMcpRaceConditions(unittest.TestCase):
             wait_for_runtime_ready(self.data_dir, expected_instance_id="inst-r2")
 
             # Same mcp_server.py process reconnects cleanly without restart
-            r2 = client.call_tool("get_library_stats")
+            r2 = client.call_tool("get_library_overview")
             self.assertFalse(r2["isError"], r2)
             self.assertEqual(client.proc.pid, adapter_pid)
 

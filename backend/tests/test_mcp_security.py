@@ -231,14 +231,15 @@ class TestMcpSecurityAndPrivacy(unittest.TestCase):
                 self.assertLessEqual(max(prev_img.size), 1024)
                 self.assertEqual(len(prev_img.getexif()), 0)
 
-            # 29 more allowed (total 30 within 60s), 31st rate-limited -> 429
-            for _ in range(29):
+            # Default max_preview_images is 5 within 60s -> 6th call is rate-limited (429)
+            for _ in range(4):
                 self.assertEqual(
                     client.get("/api/mcp/preview", params={"path": big_img, "max_size": 512}, headers=self._auth()).status_code,
                     200,
                 )
             r_429 = client.get("/api/mcp/preview", params={"path": big_img, "max_size": 512}, headers=self._auth())
             self.assertEqual(r_429.status_code, 429)
+            self.assertIn("max 5 images", r_429.json()["detail"])
         finally:
             client.__exit__(None, None, None)
             env_patch.stop()
@@ -384,6 +385,71 @@ class TestMcpSecurityAndPrivacy(unittest.TestCase):
         finally:
             client.__exit__(None, None, None)
             env_patch.stop()
+
+    def test_viewer_open_security_gates_and_launch_policy(self):
+        img = os.path.join(self.goa_dir, "viewer_photo.jpg")
+        outside_img = os.path.join(self.outside_dir, "outside.jpg")
+        make_jpeg(img)
+        make_jpeg(outside_img)
+
+        save_policy(
+            self.data_dir,
+            {
+                "mcp_enabled": True,
+                "headless_enabled": True,
+                "allow_viewer_open": False,
+                "allow_launch_desktop": False,
+                "approved_roots": [self.goa_dir],
+            },
+        )
+        env_patch, client = self._test_client()
+        try:
+            ctrl = api.controller()
+            ctrl.db.insert_image(img)
+            ctrl.db.insert_image(outside_img)
+
+            r_disabled = client.post(
+                "/api/mcp/viewer/open",
+                json={"paths": [img], "query": "test"},
+                headers=self._auth(),
+            )
+            self.assertEqual(r_disabled.status_code, 403)
+
+            save_policy(
+                self.data_dir,
+                {
+                    "mcp_enabled": True,
+                    "headless_enabled": True,
+                    "allow_viewer_open": True,
+                    "allow_launch_desktop": False,
+                    "approved_roots": [self.goa_dir],
+                },
+            )
+            r_outside = client.post(
+                "/api/mcp/viewer/open",
+                json={"paths": [outside_img]},
+                headers=self._auth(),
+            )
+            self.assertEqual(r_outside.status_code, 403)
+
+            r_too_many = client.post(
+                "/api/mcp/viewer/open",
+                json={"paths": [img] * 21},
+                headers=self._auth(),
+            )
+            self.assertEqual(r_too_many.status_code, 400)
+        finally:
+            client.__exit__(None, None, None)
+            env_patch.stop()
+
+        with StdioMcpClient(self.data_dir, MODELS_DIR, idle_timeout=60) as mcp:
+            mcp.initialize()
+            r_launch_denied = mcp.call_tool(
+                "open_in_viewer",
+                {"paths": [img], "query": "test", "launch_app": True},
+            )
+            self.assertTrue(r_launch_denied["isError"])
+            self.assertIn("disabled", r_launch_denied["content"][0]["text"].lower())
 
 
 if __name__ == "__main__":
