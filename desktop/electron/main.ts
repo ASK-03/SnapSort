@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, session, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawn, execFile, ChildProcess } from 'child_process'

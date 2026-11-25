@@ -92,7 +92,16 @@ def _startup():
 def _shutdown():
     global _controller
     if _controller is not None:
-        _controller.shutdown()
+        pool = getattr(_controller, "pool", None)
+        if pool is not None:
+            pool.terminate()
+            pool.join()
+        db = getattr(_controller, "db", None)
+        if db is not None:
+            if hasattr(db, "close"):
+                db.close()
+            elif getattr(db, "conn", None) is not None:
+                db.conn.close()
         _controller = None
 
 # Convenience alias used by every endpoint below
@@ -326,7 +335,7 @@ def _apply_edits_and_save(real_path: str, req: SaveEditRequest, db) -> str:
         db.insert_image(target_path)
     else:
         img_id = db.get_image_id(real_path)
-        if img_id is not None:
+        if img_id is not None and hasattr(db, "update_image_mtime"):
             db.update_image_mtime(img_id, os.path.getmtime(real_path))
     return target_path
 
