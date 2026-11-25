@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -33,6 +34,7 @@ from mcp_runtime import (
     append_audit_log,
     file_lock,
     load_policy,
+    read_desktop_launch_info,
     read_runtime_info,
 )
 
@@ -42,6 +44,14 @@ logging.basicConfig(
     format="[snapsort-mcp] %(levelname)s %(message)s",
 )
 logger = logging.getLogger("snapsort-mcp")
+
+
+def _detached_popen_kwargs() -> dict[str, Any]:
+    if os.name == "nt":
+        detached_process = 0x00000008
+        create_new_group = 0x00000200
+        return {"creationflags": detached_process | create_new_group}
+    return {"start_new_session": True}
 
 
 def _find_free_port() -> int:
@@ -150,13 +160,8 @@ class SnapSortMCPBridge:
             "stderr": log_fh,
             "env": env,
             "cwd": os.path.dirname(_BACKEND_DIR),
+            **_detached_popen_kwargs(),
         }
-        if os.name == "nt":
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            popen_kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-        else:
-            popen_kwargs["start_new_session"] = True
 
         logger.info("Spawning headless backend on port %d", port)
         proc = subprocess.Popen(cmd, **popen_kwargs)
@@ -250,21 +255,24 @@ class SnapSortMCPBridge:
 
 
 SERVER_INSTRUCTIONS = (
-    "SnapSort indexes and searches a local on-device photo library. "
-    "Follow these rules strictly:\n"
-    "1. STRICT PRIVACY RULE: Never view, open, or inspect any image bytes—neither via get_image_preview "
-    "nor via any local file-reading or vision tool (such as read_file, view_file, or shell commands)—unless "
-    "the user explicitly grants permission in this conversation AND allow_previews is enabled in Settings. "
-    "Return indexed file paths and metadata only.\n"
-    "2. MINIMIZE TOOL CALLS (1-2 calls max): Pass person_name directly into search_images(query=..., person_name=...) "
-    "to resolve the person and search in a single call instead of chaining list_people + get_library_stats + search_images.\n"
-    "3. PERSON-ONLY REQUESTS: Call list_people then get_person_images so photos without CLIP embeddings are included.\n"
-    "4. DO NOT LOOP ON EMPTY RESULTS: If search_images returns empty with a hint, make at most ONE broader retry "
-    "(or lower min_score once, e.g. 0.18), then report the result directly to the user.\n"
-    "5. MISSING OR EMPTY APPROVED FOLDERS: If list_approved_folders or list_folder_images returns action_required "
-    "(for example no_approved_folders or empty_folder), stop immediately and relay that exact instruction to the user.\n"
-    "6. SCANNING: Use scan_folder with wait_seconds (max 30) on approved folders and poll get_scan_progress(scan_id) if needed.\n"
-    "7. PREVIEWS: Only call get_image_preview when the user explicitly asks to inspect an image, passing user_confirmed_preview=true."
+    "SnapSort indexes and searches a local on-device photo library. Follow these rules strictly:\n"
+    "1. SINGLE-CALL ORIENTATION: Call get_library_overview ONCE when you need library stats, approved folders, "
+    "named people, or preview capabilities.\n"
+    "2. VERBATIM NATURAL QUERIES: Pass the user's natural query verbatim to search_images (for example "
+    "\"Chandler in blue shirt\"). NEVER rewrite or wrap queries into \"a photo of ...\" templates.\n"
+    "3. CONCISE PAGINATED RESULTS: search_images defaults to top_k=5 (max 20). Show the exact query requested "
+    "at the top of your reply, share only those top matches, and paginate with offset only if the user asks for more. "
+    "Never expose internal database, threshold, or embedding details.\n"
+    "4. PERSON-ONLY REQUESTS: Find person_id via get_library_overview, then call get_person_images(person_id).\n"
+    "5. DO NOT LOOP: If search_images, get_library_overview, or list_folder_images returns no matches or "
+    "action_required, stop retrying and relay that guidance directly to the user.\n"
+    "6. TWO PREVIEW OPTIONS & STRICT PRIVACY:\n"
+    "   - Option 1 (Private Viewer): Call open_in_viewer(paths=..., query=...) to display selected photos inside "
+    "SnapSort's minimal viewer without sending any image pixels to the AI. If SnapSort is closed and can_launch_app "
+    "is true, ask the user before calling open_in_viewer(..., launch_app=true).\n"
+    "   - Option 2 (AI Image Access): Only call get_image_preview(path=..., user_confirmed_preview=true) after the "
+    "user explicitly grants permission in this conversation AND allow_previews is enabled in Settings (capped by "
+    "max_preview_images). NEVER open or read image files using local file-reading or vision tools."
 )
 
 _READ_ONLY_ANNOTATIONS: dict[str, bool] = {
@@ -274,7 +282,7 @@ _READ_ONLY_ANNOTATIONS: dict[str, bool] = {
     "openWorldHint": False,
 }
 
-_SCAN_ANNOTATIONS: dict[str, bool] = {
+_NON_DESTRUCTIVE_ACTION_ANNOTATIONS: dict[str, bool] = {
     "readOnlyHint": False,
     "destructiveHint": False,
     "idempotentHint": True,
@@ -283,28 +291,31 @@ _SCAN_ANNOTATIONS: dict[str, bool] = {
 
 TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
-        "name": "list_people",
-        "description": "List indexed face clusters with assigned names and distinct photo counts.",
+        "name": "get_library_overview",
+        "description": (
+            "Get library stats, user-approved folders, named people with counts, and preview/scan capabilities "
+            "in a single call."
+        ),
         "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
                 "name_filter": {"type": "string", "description": "Optional substring filter on assigned person name."},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
-                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "people_limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+                "people_offset": {"type": "integer", "minimum": 0, "default": 0},
             },
         },
     },
     {
         "name": "get_person_images",
-        "description": "Get paginated indexed image paths containing a person cluster ID (includes photos without CLIP embeddings).",
+        "description": "Get paginated indexed image paths containing a person cluster ID.",
         "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "person_id": {"type": "integer", "description": "Face cluster ID from list_people."},
+                "person_id": {"type": "integer", "description": "Face cluster ID from get_library_overview."},
                 "folder": {"type": "string", "description": "Optional folder prefix filter."},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
                 "offset": {"type": "integer", "minimum": 0, "default": 0},
             },
             "required": ["person_id"],
@@ -313,20 +324,19 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "search_images",
         "description": (
-            "Semantic CLIP search across indexed photos in one call. "
-            "Supports optional person_name (auto-resolved), person_id, and folder filters applied before ranking, "
-            "and returns status/hint diagnostics when empty."
+            "Semantic search across indexed photos. Pass the user's natural query verbatim "
+            "(do not rewrite into 'a photo of ...'). Choose a small top_k (default 5, max 20) and use offset to paginate later."
         ),
         "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Natural-language scene or description query."},
-                "person_name": {"type": "string", "description": "Optional person name to resolve and filter before ranking (avoids extra list_people calls)."},
-                "person_id": {"type": "integer", "description": "Optional face cluster ID applied before candidate selection."},
-                "folder": {"type": "string", "description": "Optional folder prefix applied before candidate selection."},
-                "top_k": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
-                "min_score": {"type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Optional cosine similarity cutoff (defaults to 0.22, or 0.20 with person filter)."},
+                "query": {"type": "string", "description": "User's natural-language query verbatim."},
+                "person_name": {"type": "string", "description": "Optional person name filter resolved automatically."},
+                "person_id": {"type": "integer", "description": "Optional face cluster ID filter."},
+                "folder": {"type": "string", "description": "Optional folder prefix filter."},
+                "top_k": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
             },
             "required": ["query"],
         },
@@ -344,18 +354,6 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "get_library_stats",
-        "description": "Get photo count, face cluster count, named-people count, and active indexing status.",
-        "annotations": _READ_ONLY_ANNOTATIONS,
-        "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "list_approved_folders",
-        "description": "List user-approved library root folders and their indexed image counts.",
-        "annotations": _READ_ONLY_ANNOTATIONS,
-        "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
         "name": "list_folder_images",
         "description": "List paginated indexed image paths inside an approved folder.",
         "annotations": _READ_ONLY_ANNOTATIONS,
@@ -363,7 +361,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "folder": {"type": "string", "description": "Approved folder path."},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5},
                 "offset": {"type": "integer", "minimum": 0, "default": 0},
             },
             "required": ["folder"],
@@ -372,7 +370,7 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "scan_folder",
         "description": "Scan and index new or modified photos inside a user-approved folder.",
-        "annotations": _SCAN_ANNOTATIONS,
+        "annotations": _NON_DESTRUCTIVE_ACTION_ANNOTATIONS,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -394,10 +392,37 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "open_in_viewer",
+        "description": (
+            "Option 1 (private): Show selected indexed photos in SnapSort's minimal viewer without sending any "
+            "image pixels to the AI. Set launch_app=true only if SnapSort is closed and the user wants to start SnapSort."
+        ),
+        "annotations": _NON_DESTRUCTIVE_ACTION_ANNOTATIONS,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "description": "Indexed image paths to show in SnapSort's minimal viewer.",
+                },
+                "query": {"type": "string", "description": "Optional query label shown in the viewer header."},
+                "launch_app": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Set true only if SnapSort is closed and the user agreed to launch SnapSort.",
+                },
+            },
+            "required": ["paths"],
+        },
+    },
+    {
         "name": "get_image_preview",
         "description": (
-            "Fetch a downscaled EXIF-stripped JPEG preview of an indexed image ONLY when the user explicitly "
-            "gives permission in this conversation AND allow_previews is enabled in Settings."
+            "Option 2 (AI image access): Fetch a downscaled EXIF-stripped JPEG preview ONLY when the user explicitly "
+            "gives permission in this conversation AND allow_previews is enabled in Settings (strictly capped)."
         ),
         "annotations": _READ_ONLY_ANNOTATIONS,
         "inputSchema": {
@@ -416,22 +441,71 @@ TOOLS_SCHEMA: list[dict[str, Any]] = [
 ]
 
 
+def _launch_desktop_app(bridge: SnapSortMCPBridge) -> dict[str, Any]:
+    """Start the SnapSort desktop app detached using recorded launch metadata."""
+    policy = load_policy(bridge.data_dir)
+    if not policy["allow_launch_desktop"]:
+        raise RuntimeError(
+            "Starting SnapSort from MCP is disabled in Settings. Ask the user to open SnapSort manually "
+            "or enable 'Allow Starting SnapSort When Closed' under Preview & Viewing Options."
+        )
+
+    launch_info = read_desktop_launch_info(bridge.data_dir)
+    if not launch_info or not isinstance(launch_info.get("command"), str) or not launch_info["command"].strip():
+        raise RuntimeError(
+            "SnapSort launch metadata is unavailable. Open SnapSort once manually to record launch details."
+        )
+
+    cmd_exe = launch_info["command"].strip()
+    if not (shutil.which(cmd_exe) or os.path.exists(cmd_exe)):
+        raise RuntimeError("Recorded SnapSort executable does not exist on disk. Open SnapSort manually.")
+
+    raw_args = launch_info.get("args")
+    args = [str(a) for a in raw_args] if isinstance(raw_args, list) else []
+    cwd = launch_info.get("cwd") if isinstance(launch_info.get("cwd"), str) and os.path.isdir(launch_info["cwd"]) else None
+
+    proc = subprocess.Popen(
+        [cmd_exe, *args],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=cwd,
+        **_detached_popen_kwargs(),
+    )
+    threading.Thread(target=proc.wait, daemon=True).start()
+
+    deadline = time.monotonic() + 5.0
+    desktop_running = False
+    while time.monotonic() < deadline:
+        try:
+            st = bridge.request_json("GET", "/api/status", timeout=2.0)
+            if isinstance(st, dict) and st.get("desktop_attached"):
+                desktop_running = True
+                break
+        except Exception:
+            pass
+        time.sleep(0.25)
+    return {"launched": True, "desktop_running": desktop_running}
+
+
 def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    if name == "list_people":
+    if name == "get_library_overview":
         params: dict[str, Any] = {
-            "limit": min(100, max(1, int(args.get("limit", 20)))),
-            "offset": max(0, int(args.get("offset", 0))),
+            "people_limit": min(50, max(1, int(args.get("people_limit", 20)))),
+            "people_offset": max(0, int(args.get("people_offset", 0))),
         }
         if args.get("name_filter"):
-            params["name"] = str(args["name_filter"])
+            params["name_filter"] = str(args["name_filter"])
         qs = urllib.parse.urlencode(params)
-        data = bridge.request_json("GET", f"/api/faces?{qs}")
-        return [{"type": "text", "text": json.dumps(data)}], {"count": len(data.get("faces", [])) if isinstance(data, dict) else 0}
+        data = bridge.request_json("GET", f"/api/mcp/overview?{qs}")
+        people_count = len(data.get("people", [])) if isinstance(data, dict) else 0
+        folders_count = len(data.get("folders", [])) if isinstance(data, dict) else 0
+        return [{"type": "text", "text": json.dumps(data)}], {"people": people_count, "folders": folders_count}
 
     if name == "get_person_images":
         person_id = int(args["person_id"])
         params = {
-            "limit": min(100, max(1, int(args.get("limit", 20)))),
+            "limit": min(20, max(1, int(args.get("limit", 5)))),
             "offset": max(0, int(args.get("offset", 0))),
         }
         if args.get("folder"):
@@ -443,7 +517,8 @@ def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) ->
     if name == "search_images":
         params = {
             "q": str(args["query"]),
-            "limit": min(100, max(1, int(args.get("top_k", 20)))),
+            "limit": min(20, max(1, int(args.get("top_k", 5)))),
+            "offset": max(0, int(args.get("offset", 0))),
             "include_meta": "true",
         }
         if args.get("person_name"):
@@ -452,8 +527,6 @@ def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) ->
             params["person_id"] = int(args["person_id"])
         if args.get("folder"):
             params["folder"] = str(args["folder"])
-        if args.get("min_score") is not None:
-            params["min_score"] = max(0.0, min(1.0, float(args["min_score"])))
         qs = urllib.parse.urlencode(params)
         data = bridge.request_json("GET", f"/api/search?{qs}")
         return [{"type": "text", "text": json.dumps(data)}], {"query": params["q"], "count": len(data.get("results", [])) if isinstance(data, dict) else 0}
@@ -463,18 +536,10 @@ def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) ->
         data = bridge.request_json("GET", f"/api/images/faces?{qs}")
         return [{"type": "text", "text": json.dumps(data)}], {"path": str(args["path"])}
 
-    if name == "get_library_stats":
-        data = bridge.request_json("GET", "/api/stats")
-        return [{"type": "text", "text": json.dumps(data)}], {}
-
-    if name == "list_approved_folders":
-        data = bridge.request_json("GET", "/api/mcp/folders")
-        return [{"type": "text", "text": json.dumps(data)}], {"folders": len(data.get("folders", [])) if isinstance(data, dict) else 0}
-
     if name == "list_folder_images":
         params = {
             "folder": str(args["folder"]),
-            "limit": min(100, max(1, int(args.get("limit", 20)))),
+            "limit": min(20, max(1, int(args.get("limit", 5)))),
             "offset": max(0, int(args.get("offset", 0))),
         }
         qs = urllib.parse.urlencode(params)
@@ -497,18 +562,49 @@ def _execute_tool(bridge: SnapSortMCPBridge, name: str, args: dict[str, Any]) ->
         data = bridge.request_json("GET", f"/api/progress{suffix}")
         return [{"type": "text", "text": json.dumps(data)}], {"scan_id": args.get("scan_id")}
 
+    if name == "open_in_viewer":
+        raw_paths = args.get("paths")
+        if not isinstance(raw_paths, list) or not raw_paths:
+            raise ValueError("paths must be a non-empty list of image paths.")
+        body: dict[str, Any] = {"paths": [str(p) for p in raw_paths[:20]]}
+        if isinstance(args.get("query"), str) and args["query"].strip():
+            body["query"] = args["query"].strip()
+        data = bridge.request_json("POST", "/api/mcp/viewer/open", json_body=body)
+        if isinstance(data, dict) and data.get("status") == "app_not_running":
+            if args.get("launch_app") is True:
+                launch_res = _launch_desktop_app(bridge)
+                out = {
+                    **data,
+                    "status": "launched_and_opened" if launch_res["desktop_running"] else "launching",
+                    "desktop_running": launch_res["desktop_running"],
+                }
+                return [{"type": "text", "text": json.dumps(out)}], {"count": out.get("count", 0), "status": out["status"]}
+            hint = (
+                "SnapSort desktop app is currently closed. Ask the user if they want you to start SnapSort "
+                "(then call open_in_viewer with launch_app=true)."
+                if data.get("can_launch_app")
+                else "SnapSort desktop app is currently closed. Ask the user to open SnapSort (or enable "
+                "'Allow Starting SnapSort When Closed' in Settings) so these photos can open in the viewer."
+            )
+            out = {**data, "hint": hint}
+            return [{"type": "text", "text": json.dumps(out)}], {"count": out.get("count", 0), "status": out["status"]}
+        count = data.get("count", 0) if isinstance(data, dict) else 0
+        status_val = data.get("status") if isinstance(data, dict) else None
+        return [{"type": "text", "text": json.dumps(data)}], {"count": count, "status": status_val}
+
     if name == "get_image_preview":
         if args.get("user_confirmed_preview") is not True:
             raise RuntimeError(
                 "Permission required: Do not view or open any image (via get_image_preview or any local "
-                "file-reading tool) until the user explicitly grants permission in this conversation."
+                "file-reading tool) until the user explicitly grants permission in this conversation. "
+                "Use open_in_viewer instead to show images privately in SnapSort."
             )
         policy = load_policy(bridge.data_dir)
         if not policy["allow_previews"]:
             raise RuntimeError(
                 "Visual previews are disabled in SnapSort Settings. Do NOT open or read this image path "
-                "with any local file or vision tool; ask the user to enable 'Allow Visual Previews' in "
-                "SnapSort Settings if they want you to inspect photos."
+                "with any local file or vision tool; use open_in_viewer to show the photo privately in SnapSort, "
+                "or ask the user to enable 'Allow AI Image Inspection' in Settings."
             )
         max_size = max(64, min(1024, int(args.get("max_size", 1024))))
         qs = urllib.parse.urlencode({"path": str(args["path"]), "max_size": max_size})
