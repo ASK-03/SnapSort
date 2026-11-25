@@ -13,5 +13,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   showApplicationMenu: (x: number, y: number) => ipcRenderer.send('window:show-menu', x, y),
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
-  getBackendPort: () => ipcRenderer.invoke('getBackendPort')
+  getBackendPort: () => ipcRenderer.invoke('getBackendPort'),
+  getBackendConfig: () => ipcRenderer.invoke('getBackendConfig'),
+  getMcpPolicy: () => ipcRenderer.invoke('mcp:getPolicy'),
+  saveMcpPolicy: (policy: Record<string, unknown>) => ipcRenderer.invoke('mcp:savePolicy', policy),
+  addMcpApprovedFolder: () => ipcRenderer.invoke('mcp:addApprovedFolder'),
+  getMcpClientConfig: () => ipcRenderer.invoke('mcp:getClientConfig'),
+  listMcpClients: () => ipcRenderer.invoke('mcp:listClients'),
+  connectMcpClient: (clientId: string) => ipcRenderer.invoke('mcp:connectClient', clientId),
+  disconnectMcpClient: (clientId: string) => ipcRenderer.invoke('mcp:disconnectClient', clientId),
+  getMcpAuditLog: () => ipcRenderer.invoke('mcp:getAuditLog'),
+  stopMcpHeadless: () => ipcRenderer.invoke('mcp:stopHeadless'),
+  onMcpOpenViewer: (cb: (req: { id: string; paths: string[]; query?: string | null }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, val: { id: string; paths: string[]; query?: string | null }) => cb(val)
+    ipcRenderer.on('mcp:open-viewer', handler)
+    return () => ipcRenderer.removeListener('mcp:open-viewer', handler)
+  },
+  consumePendingMcpViewer: () => ipcRenderer.invoke('mcp:consumePendingViewer'),
 })

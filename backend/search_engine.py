@@ -1,57 +1,55 @@
 """
-Semantic search engine: CLIP text query → FAISS candidates → face-name reranking.
+Semantic search engine: CLIP text query -> FAISS candidates -> face-name reranking.
 
-Pipeline:
-  1. Direct name resolution: match known face names against query words
-     (exact overlap or rapidfuzz typo tolerance)
-  2. CLIP text encode: 512-d query embedding
-  3. FAISS search: top-K candidates (image_ids + cosine scores)
-  4. Face-name rerank:
-       - boost images containing matched faces: +0.30 (all), +0.15 (some)
-       - penalise if names given but none found: -0.50
-  5. Return ranked [(image_path, score), ...]
+Supports:
+  - Global CLIP search + face-name reranking
+  - Pre-filtered subset search by person_id and/or canonical folder path
+  - Lazy CLIPProcessor resolution via callable getter
 """
 import logging
+import re
 import numpy as np
 from rapidfuzz import fuzz
 
 logger = logging.getLogger(__name__)
 
 # Reranking score adjustments
-_BONUS_ALL  =  0.30   # all named entities present
-_BONUS_SOME =  0.15   # at least one named entity present
-_PENALTY    = -0.50   # name given but not found in image
+_BONUS_ALL = 0.30    # all named entities present
+_BONUS_SOME = 0.15   # at least one named entity present
+_PENALTY = -0.50     # name given but not found in image
 
 
 class SearchEngine:
     def __init__(self, db, clip_index, clip_processor):
-        self.db             = db
-        self.clip_index     = clip_index
-        self.clip_processor = clip_processor
-    # ------------------------------------------------------------------
+        self.db = db
+        self.clip_index = clip_index
+        self._clip_processor = clip_processor
+
+    def _get_clip_processor(self):
+        if callable(self._clip_processor):
+            return self._clip_processor()
+        return self._clip_processor
+
     def _extract_and_resolve_names(self, query: str) -> dict[str, list[int]]:
         """
-        Directly find known database names in the query string (bypassing spaCy NER).
+        Directly find known database names in the query string.
         Matches exact words or slight typos (via rapidfuzz).
-        Returns {face_name: [face_id, ...]}
+        Returns {face_name: [face_id, ...]}.
         """
         named_faces = self.db.get_all_named_faces()
         if not named_faces:
             return {}
 
-        import re
-        query_words = set(re.findall(r'\b\w+\b', query.lower()))
-        name_to_fids = {}
+        query_words = set(re.findall(r"\b\w+\b", query.lower()))
+        name_to_fids: dict[str, list[int]] = {}
 
         for face_id, face_name in named_faces:
-            face_words = set(re.findall(r'\b\w+\b', face_name.lower()))
-            
-            # 1. Exact word overlap (e.g. "Aditya" in query matches "Aditya Dubey" in DB)
+            face_words = set(re.findall(r"\b\w+\b", face_name.lower()))
+
             if face_words.intersection(query_words):
                 name_to_fids.setdefault(face_name, []).append(face_id)
                 continue
-                
-            # 2. Slight typo matching for words >= 3 chars
+
             matched = False
             for fw in face_words:
                 if len(fw) < 3:
@@ -63,7 +61,7 @@ class SearchEngine:
                         break
                 if matched:
                     break
-                    
+
         return name_to_fids
 
     def _face_bonus(self, image_id: int, name_to_fids: dict) -> float:
@@ -73,7 +71,7 @@ class SearchEngine:
 
         face_ids_in_image = set(self.db.get_face_ids_for_image_id(image_id))
         all_names_present = True
-        any_name_present  = False
+        any_name_present = False
 
         for fids in name_to_fids.values():
             if any(fid in face_ids_in_image for fid in fids):
@@ -85,49 +83,110 @@ class SearchEngine:
             return _BONUS_ALL
         if any_name_present:
             return _BONUS_SOME
-        return _PENALTY   # name given, none found
+        return _PENALTY
 
-    # ------------------------------------------------------------------
-    def search(self, query: str, top_k: int = 20, min_score: float = 0.25) -> list[tuple[str, float]]:
-        """
-        Full semantic search + reranking.
-        Returns [(image_path, score), ...] sorted by descending score.
-        """
-        if self.clip_index.index.ntotal == 0:
-            logger.info("CLIP index empty — no results")
-            return []
+    def _embed_query(self, query: str) -> np.ndarray:
+        """Encode the user query directly without rewriting it into template phrases."""
+        proc = self._get_clip_processor()
+        return np.asarray(proc.embed_text(query.strip()), dtype="float32")
 
-        # 1. Direct Name Resolution
-        name_to_fids = self._extract_and_resolve_names(query)
+    def search_with_diagnostics(
+        self,
+        query: str,
+        top_k: int = 20,
+        min_score: float = 0.25,
+        person_id: int | None = None,
+        folder: str | None = None,
+        offset: int = 0,
+    ) -> tuple[list[tuple[str, float]], int, float | None]:
+        """
+        Semantic search with optional pre-candidate person/folder filtering and pagination.
+        Returns ([(image_path, score), ...], total_matches, highest_below_threshold).
+        """
+        if self.clip_index.ntotal == 0 or not query or not query.strip():
+            return [], 0, None
+
+        safe_offset = max(0, int(offset))
+        safe_top_k = max(1, int(top_k))
+
+        allowed_ids: set[int] | None = None
+        if person_id is not None:
+            allowed_ids = self.db.get_image_ids_for_face(person_id)
+        if folder is not None and folder.strip():
+            folder_ids = self.db.get_image_ids_in_folder(folder.strip())
+            allowed_ids = folder_ids if allowed_ids is None else (allowed_ids & folder_ids)
+
+        if allowed_ids is not None and not allowed_ids:
+            return [], 0, None
+
+        use_name_rerank = person_id is None
+        name_to_fids = self._extract_and_resolve_names(query) if use_name_rerank else {}
         names_found = list(name_to_fids.keys())
-        logger.info("Search: %r  names_found=%s", query, names_found)
+        logger.info(
+            "Search: %r  person_id=%s folder=%s min_score=%.3f names_found=%s",
+            query,
+            person_id,
+            folder,
+            min_score,
+            names_found,
+        )
 
-        # 2. CLIP text embedding
-        query_emb = self.clip_processor.embed_text(query)
+        query_emb = self._embed_query(query)
+        k_fetch = max(50, (safe_offset + safe_top_k) * 3)
 
-        # 3. FAISS: retrieve 3× top_k candidates for reranking headroom
-        candidates = self.clip_index.search(query_emb, k=top_k * 3)
+        if allowed_ids is not None:
+            candidates = self.clip_index.search_subset(query_emb, allowed_ids, k=k_fetch)
+        else:
+            candidates = self.clip_index.search(query_emb, k=k_fetch)
 
-        # 4. Rerank
-        scored = []
-        seen_images = set()
+        scored: list[tuple[str, float]] = []
+        seen_images: set[int] = set()
+        highest_below: float | None = None
+
         for image_id, clip_score in candidates:
             if image_id in seen_images:
                 continue
             seen_images.add(image_id)
 
-            # ViT-B/32 cosine similarity < 0.21 usually means no semantic match
             if clip_score < min_score:
+                if highest_below is None or clip_score > highest_below:
+                    highest_below = float(clip_score)
                 continue
-                
+
             bonus = self._face_bonus(image_id, name_to_fids) if names_found else 0.0
             final_score = clip_score + bonus
+
             if names_found and final_score < 0.21:
+                if highest_below is None or final_score > highest_below:
+                    highest_below = float(final_score)
                 continue
-                
-            path  = self.db.get_image_path(image_id)
+
+            path = self.db.get_image_path(image_id)
             if path:
-                scored.append((path, final_score))
+                scored.append((path, float(final_score)))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        return scored[:top_k]
+        total_matches = len(scored)
+        page = scored[safe_offset : safe_offset + safe_top_k]
+        return page, total_matches, (None if scored else highest_below)
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 20,
+        min_score: float = 0.25,
+        person_id: int | None = None,
+        folder: str | None = None,
+    ) -> list[tuple[str, float]]:
+        """
+        Semantic search with optional pre-candidate person/folder filtering.
+        Returns [(image_path, score), ...] sorted by descending score.
+        """
+        results, _, _ = self.search_with_diagnostics(
+            query=query,
+            top_k=top_k,
+            min_score=min_score,
+            person_id=person_id,
+            folder=folder,
+        )
+        return results

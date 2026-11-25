@@ -7,9 +7,18 @@ export const api = axios.create({
 
 export const initApi = async () => {
   if (window.electronAPI) {
-    const port = await window.electronAPI.getBackendPort();
-    BASE_URL = `http://127.0.0.1:${port}`;
-    api.defaults.baseURL = `${BASE_URL}/api`;
+    if (window.electronAPI.getBackendConfig) {
+      const { port, token } = await window.electronAPI.getBackendConfig();
+      BASE_URL = `http://127.0.0.1:${port}`;
+      api.defaults.baseURL = `${BASE_URL}/api`;
+      if (token) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+    } else {
+      const port = await window.electronAPI.getBackendPort();
+      BASE_URL = `http://127.0.0.1:${port}`;
+      api.defaults.baseURL = `${BASE_URL}/api`;
+    }
   }
 };
 

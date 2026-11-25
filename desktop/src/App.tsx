@@ -11,6 +11,7 @@ import { Lightbox } from './components/Lightbox';
 import { ContextMenu } from './components/ContextMenu';
 import { Settings } from './components/Settings';
 import { About } from './components/About';
+import { McpViewer } from './components/McpViewer';
 import { StartupSplash } from './components/StartupSplash';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
     viewMode,
     theme,
     selectedPerson,
+    setMcpViewerSession,
   } = useAppStore();
   const query = searchQuery.trim();
   const [isReady, setIsReady] = useState(false);
@@ -79,8 +81,34 @@ function App() {
 
   useEffect(() => {
     if (!isReady) return;
+    // Initial load + attach to any headless scan already in progress
     loadImages();
-  }, [isReady, loadImages]);
+    getProgress()
+      .then((prog) => {
+        if (prog.is_scanning) {
+          setIsScanning(true);
+          setProgress({ total: prog.total_images, processed: prog.processed_images, pending: prog.pending_tasks });
+        }
+      })
+      .catch(console.error);
+
+    window.electronAPI?.consumePendingMcpViewer?.().then((req) => {
+      if (req?.paths?.length) {
+        setMcpViewerSession({ paths: req.paths, query: req.query ?? null });
+        setSplashDone(true);
+      }
+    }).catch(console.error);
+
+    const unsubscribe = window.electronAPI?.onMcpOpenViewer?.((req) => {
+      if (req?.paths?.length) {
+        setMcpViewerSession({ paths: req.paths, query: req.query ?? null });
+        setSplashDone(true);
+      }
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [isReady, loadImages, setIsScanning, setProgress, setMcpViewerSession]);
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-text overflow-hidden font-sans selection:bg-accent/30">
@@ -107,6 +135,7 @@ function App() {
         <>
           <Lightbox />
           <ContextMenu />
+          <McpViewer />
         </>
       )}
 
